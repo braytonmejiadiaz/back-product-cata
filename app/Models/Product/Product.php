@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use App\Models\Discount\DiscountProduct;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\User;
 
 class Product extends Model
@@ -234,5 +235,9 @@ class Product extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+    public function product_variations(): HasMany
+    {
+        return $this->hasMany(ProductVariation::class, 'product_id');
     }
 }

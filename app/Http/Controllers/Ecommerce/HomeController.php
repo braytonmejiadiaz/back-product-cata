@@ -272,12 +272,36 @@ public function getSlidersByUserSlug($slug)
 public function getProductById($productId)
 {
     // Busca el producto por su ID
-    $product = Product::find($productId);
+    $product = Product::with(['brand', 'categorie_first', 'categorie_second', 'categorie_third', 'images', 'product_variations', 'product_variations.propertie', 'product_variations.attribute'])
+    ->find($productId);
 
     // Si el producto no existe, devuelve un error 404
     if (!$product) {
         return response()->json(['error' => 'Producto no encontrado'], 404);
     }
+
+      // Obtener las variaciones del producto si es variable
+      $variations = [];
+      if ($product->product_variations->isNotEmpty()) {
+          $variations = $product->product_variations->map(function ($variation) {
+              return [
+                  'id' => $variation->id,
+                  'attribute' => $variation->attribute ? [
+                      'id' => $variation->attribute->id,
+                      'name' => $variation->attribute->name,
+                  ] : NULL,
+                  'propertie' => $variation->propertie ? [
+                      'id' => $variation->propertie->id,
+                      'name' => $variation->propertie->name,
+                      'code' => $variation->propertie->code,
+                  ] : NULL,
+                  'value_add' => $variation->value_add,
+                  'add_price' => $variation->add_price,
+                  'stock' => $variation->stock,
+              ];
+          });
+      }
+
 
     // Devuelve el producto en formato JSON
     return response()->json([
@@ -286,6 +310,7 @@ public function getProductById($productId)
             'title' => $product->title,
             'description' => $product->description,
             'price_cop' => $product->price_cop,
+            'tags' => $product->tags,
             'imagen' => $product->imagen ? rtrim(env("APP_URL"), '/') . "/storage/" . ltrim($product->imagen, '/') : NULL,
             'brand' => $product->brand ? [
                 'id' => $product->brand->id,
@@ -303,6 +328,13 @@ public function getProductById($productId)
                 'id' => $product->categorie_third->id,
                 'name' => $product->categorie_third->name,
             ] : NULL,
+            'images' => $product->images->map(function ($image) {
+                return [
+                    'id' => $image->id,
+                    'imagen' => $image->imagen ? rtrim(env("APP_URL"), '/') . "/storage/" . ltrim($image->imagen, '/') : NULL,
+                ];
+            }),
+            'variations' => $variations,
         ],
     ]);
 }

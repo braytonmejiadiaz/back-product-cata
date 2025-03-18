@@ -68,8 +68,8 @@ Route::group([
     Route::resource("sliders",SliderController::class);
     Route::post("sliders/{id}",[SliderController::class,"update"]);
 
-    Route::get("products/config",[ProductController::class,"config"]);
     Route::post("products/imagens",[ProductController::class,"imagens"]);
+    Route::get("products/config",[ProductController::class,"config"]);
     Route::delete("products/imagens/{id}",[ProductController::class,"delete_imagen"]);
     Route::post("products/index",[ProductController::class,"index"]);
     Route::resource("products",ProductController::class);
@@ -149,11 +149,11 @@ Route::group([
 
 
 });
-Route::get('/tienda/{slug}', [HomeController::class, 'mostrarTiendaUsuario']);
 Route::get('/productos/{slug}', [HomeController::class, 'getProductosBySlug']);
+Route::get('/products/{productId}', [HomeController::class, 'getProductById']);
+Route::get('/tienda/{slug}', [HomeController::class, 'mostrarTiendaUsuario']);
 Route::get('/user/{user_id}/products', [HomeController::class, 'getProductsByUserId']);
 Route::get('/user/{slug}/products', [HomeController::class, 'getProductsByUserSlug']);
 Route::get('/tienda/{slug}/categories', [HomeController::class, 'getCategoriesByUserSlug']);
 Route::get('/tienda/{slug}/sliders', [HomeController::class, 'getSlidersByUserSlug']);
-Route::get('/products/{productId}', [HomeController::class, 'getProductById']);
 Route::get('/usuario/{slug}', [HomeController::class, 'getUserDataBySlug']);
