@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "b0dcc48a9be5107aace763bc801ec97e",
+    "content-hash": "cc624f7eb2c76ea6d74c973c70003715",
     "packages": [
         {
             "name": "barryvdh/laravel-dompdf",
@@ -2655,16 +2655,16 @@
         },
         {
             "name": "mercadopago/dx-php",
-            "version": "3.0.2",
+            "version": "3.0.8",
             "source": {
                 "type": "git",
                 "url": "https://github.com/mercadopago/sdk-php.git",
-                "reference": "532e96456dbeb7129e03bca049b2c742c4975673"
+                "reference": "b03c3c789c7d4fedfcf7d54cf57993e77c95aabb"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/mercadopago/sdk-php/zipball/532e96456dbeb7129e03bca049b2c742c4975673",
-                "reference": "532e96456dbeb7129e03bca049b2c742c4975673",
+                "url": "https://api.github.com/repos/mercadopago/sdk-php/zipball/b03c3c789c7d4fedfcf7d54cf57993e77c95aabb",
+                "reference": "b03c3c789c7d4fedfcf7d54cf57993e77c95aabb",
                 "shasum": ""
             },
             "require": {
@@ -2688,9 +2688,9 @@
             "description": "Mercado Pago PHP SDK",
             "homepage": "https://github.com/mercadopago/sdk-php",
             "support": {
-                "source": "https://github.com/mercadopago/sdk-php/tree/3.0.2"
+                "source": "https://github.com/mercadopago/sdk-php/tree/3.0.8"
             },
-            "time": "2024-01-15T12:54:20+00:00"
+            "time": "2024-09-03T12:26:16+00:00"
         },
         {
             "name": "monolog/monolog",
@@ -9339,12 +9339,12 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
         "php": "^8.1"
     },
-    "platform-dev": [],
-    "plugin-api-version": "2.3.0"
+    "platform-dev": {},
+    "plugin-api-version": "2.6.0"
 }

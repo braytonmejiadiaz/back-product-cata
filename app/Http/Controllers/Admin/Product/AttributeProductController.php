@@ -49,12 +49,14 @@ class AttributeProductController extends Controller
      */
     public function store(Request $request)
     {
-        $isValida = Attribute::where("name", $request->name)->first();
-        if($isValida){
-            return response()->json(["message" => 403]);
+        $isValida = Attribute::where("user_id", auth()->id())
+                             ->where("name", $request->name)
+                             ->first();
+
+        if ($isValida) {
+            return response()->json(["message" => 403, "message_text" => "Ya existe un atributo con este nombre."]);
         }
 
-        // Asigna el user_id del usuario autenticado
         $request->merge(['user_id' => auth()->id()]);
 
         $attribute = Attribute::create($request->all());
@@ -112,9 +114,14 @@ class AttributeProductController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $isValida = Attribute::where("id", "<>", $id)->where("name", $request->name)->first();
-        if($isValida){
-            return response()->json(["message" => 403]);
+        // Verifica si ya existe un atributo con el mismo nombre para el usuario autenticado, excluyendo el atributo actual
+        $isValida = Attribute::where("user_id", auth()->id())
+                             ->where("id", "<>", $id)
+                             ->where("name", $request->name)
+                             ->first();
+
+        if ($isValida) {
+            return response()->json(["message" => 403, "message_text" => "Ya existe un atributo con este nombre."]);
         }
 
         $attribute = Attribute::findOrFail($id);

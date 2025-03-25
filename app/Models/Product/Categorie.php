@@ -15,7 +15,6 @@ class Categorie extends Model
     use SoftDeletes;
     protected $fillable = [
         "name",
-        "icon",
         "imagen",
         "categorie_second_id",
         "categorie_third_id",

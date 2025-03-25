@@ -20,7 +20,9 @@ use App\Http\Controllers\Admin\Product\AttributeProductController;
 use App\Http\Controllers\Admin\Product\ProductVariationsController;
 use App\Http\Controllers\Admin\Product\ProductSpecificationsController;
 use App\Http\Controllers\Admin\Product\ProductVariationsAnidadoController;
-
+use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\PlanController;
+use App\Http\Controllers\PurchaseController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -39,6 +41,16 @@ Route::group([
     // 'middleware' => 'auth:api',
     'prefix' => 'auth'
 ], function ($router) {
+
+    Route::post('/create-preference', [SubscriptionController::class, 'createPreference']);
+    Route::get('/plans', [PlanController::class, 'index']);
+    Route::get('payment/success', [AuthController::class, 'paymentSuccess'])->name('payment.success');
+    Route::get('payment/failure', [AuthController::class, 'paymentFailure'])->name('failure');
+    Route::get('payment/pending', [AuthController::class, 'paymentPending'])->name('pending');
+    Route::post('/mercadopago/webhook', [AuthController::class, 'webhook'])->name('mercadopago.webhook');
+
+
+
     Route::post('/register', [AuthController::class, 'register'])->name('register');
     Route::post('/login', [AuthController::class, 'login'])->name('login');
     Route::post('/login_ecommerce', [AuthController::class, 'login_ecommerce'])->name('login_ecommerce');
@@ -57,6 +69,8 @@ Route::group([
     "middleware" => "auth:api",
     "prefix" => "admin",
 ],function ($router) {
+    Route::post('/purchases', [PurchaseController::class, 'store']);
+    Route::get('/purchases', [PurchaseController::class, 'index']);
     Route::get("categories/config",[CategorieController::class,"config"]);
     Route::resource("categories",CategorieController::class);
     Route::post("categories/{id}",[CategorieController::class,"update"]);
@@ -90,14 +104,10 @@ Route::group([
 
     Route::post("sales/list",[SalesController::class,"list"]);
 
-    // Route::get("profile_client/me",[AuthController::class,"me"]);
-    // Route::get("profile_client/orders",[SaleController::class,"orders"]);
-    // Route::put('profile_client', [AuthController::class, 'update']);
-    // Route::resource('reviews', ReviewController::class);
-        // ruta de perfil user
-        Route::get('profile_client/me', [AuthController::class, 'me']);
-        Route::put('profile_client', [AuthController::class, 'update']);
-        Route::delete('delete_popup', [AuthController::class, 'deletePopupImage']);
+
+    Route::put('profile_client', [AuthController::class, 'update']);
+    Route::get('profile_client/me', [AuthController::class, 'me']);
+    Route::delete('delete_popup', [AuthController::class, 'deletePopupImage']);
 
 
     Route::group([
@@ -149,6 +159,7 @@ Route::group([
 
 
 });
+Route::get('/usuario/{slug}', [HomeController::class, 'getUserDataBySlug']);
 Route::get('/productos/{slug}', [HomeController::class, 'getProductosBySlug']);
 Route::get('/products/{productId}', [HomeController::class, 'getProductById']);
 Route::get('/tienda/{slug}', [HomeController::class, 'mostrarTiendaUsuario']);
@@ -156,4 +167,12 @@ Route::get('/user/{user_id}/products', [HomeController::class, 'getProductsByUse
 Route::get('/user/{slug}/products', [HomeController::class, 'getProductsByUserSlug']);
 Route::get('/tienda/{slug}/categories', [HomeController::class, 'getCategoriesByUserSlug']);
 Route::get('/tienda/{slug}/sliders', [HomeController::class, 'getSlidersByUserSlug']);
-Route::get('/usuario/{slug}', [HomeController::class, 'getUserDataBySlug']);
+
+Route::post('/purchases', [PurchaseController::class, 'store']);
+
+Route::group([
+    'middleware' => 'auth:api',
+    'prefix' => 'api',
+], function ($router) {
+    Route::get('/purchases', [PurchaseController::class, 'index']);
+});

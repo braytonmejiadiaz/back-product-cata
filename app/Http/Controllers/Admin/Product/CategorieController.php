@@ -55,9 +55,13 @@ class CategorieController extends Controller
      */
     public function store(Request $request)
     {
-        $is_exists = Categorie::where("name", $request->name)->first();
+        // Verifica si ya existe una categoría con el mismo nombre para el usuario autenticado
+        $is_exists = Categorie::where("user_id", auth()->id())
+            ->where("name", $request->name)
+            ->first();
+
         if ($is_exists) {
-            return response()->json(["message" => 403]);
+            return response()->json(["message" => 403, "message_text" => "Ya existe una categoría con este nombre."]);
         }
 
         if ($request->hasFile("image")) {
@@ -70,7 +74,7 @@ class CategorieController extends Controller
 
         $categorie = Categorie::create($request->all());
 
-        return response()->json(["message" => 200]);
+        return response()->json(["message" => 200, "message_text" => "Categoría creada exitosamente."]);
     }
 
     /**
@@ -88,9 +92,13 @@ class CategorieController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $is_exists = Categorie::where("id", '<>', $id)->where("name", $request->name)->first();
+        $is_exists = Categorie::where("user_id", auth()->id())
+            ->where("id", '<>', $id)
+            ->where("name", $request->name)
+            ->first();
+
         if ($is_exists) {
-            return response()->json(["message" => 403]);
+            return response()->json(["message" => 403, "message_text" => "Ya existe una categoría con este nombre."]);
         }
 
         $categorie = Categorie::findOrFail($id);
@@ -110,7 +118,7 @@ class CategorieController extends Controller
 
         $categorie->update($request->all());
 
-        return response()->json(["message" => 200]);
+        return response()->json(["message" => 200, "message_text" => "Categoría actualizada exitosamente."]);
     }
 
     /**

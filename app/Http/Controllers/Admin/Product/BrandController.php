@@ -16,7 +16,6 @@ class BrandController extends Controller
     {
         $search = $request->search;
 
-        // Filtra las marcas por el user_id del usuario autenticado
         $brands = Brand::where("user_id", auth()->id())
                         ->where("name", "like", "%".$search."%")
                         ->orderBy("id", "desc")
@@ -40,9 +39,12 @@ class BrandController extends Controller
      */
     public function store(Request $request)
     {
-        $isValida = Brand::where("name", $request->name)->first();
+        $isValida = Brand::where("user_id", auth()->id())
+                         ->where("name", $request->name)
+                         ->first();
+
         if ($isValida) {
-            return response()->json(["message" => 403]);
+            return response()->json(["message" => 403, "message_text" => "Ya existe una marca con este nombre."]);
         }
 
         // Asigna el user_id del usuario autenticado
@@ -74,14 +76,17 @@ class BrandController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $isValida = Brand::where("id", "<>", $id)->where("name", $request->name)->first();
+        $isValida = Brand::where("user_id", auth()->id())
+                         ->where("id", "<>", $id)
+                         ->where("name", $request->name)
+                         ->first();
+
         if ($isValida) {
-            return response()->json(["message" => 403]);
+            return response()->json(["message" => 403, "message_text" => "Ya existe una marca con este nombre."]);
         }
 
         $brand = Brand::findOrFail($id);
 
-        // Verifica que la marca pertenezca al usuario autenticado
         if ($brand->user_id !== auth()->id()) {
             return response()->json(["message" => 403, "message_text" => "No tienes permiso para actualizar esta marca"]);
         }

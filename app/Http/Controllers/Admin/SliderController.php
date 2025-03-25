@@ -47,7 +47,16 @@ class SliderController extends Controller
      */
     public function store(Request $request)
     {
-        if($request->hasFile("image")){
+        // Verifica si ya existe un slider con el mismo título para el usuario autenticado
+        $isValid = Slider::where("user_id", auth()->id())
+                         ->where("title", $request->title)
+                         ->first();
+
+        if ($isValid) {
+            return response()->json(["message" => 403, "message_text" => "Ya existe un slider con este título."]);
+        }
+
+        if ($request->hasFile("image")) {
             $path = Storage::putFile("sliders", $request->file("image"));
             $request->request->add(["imagen" => $path]);
         }
@@ -99,8 +108,18 @@ class SliderController extends Controller
             return response()->json(["message" => 403, "message_text" => "No tienes permiso para actualizar este slider"]);
         }
 
-        if($request->hasFile("image")){
-            if($slider->imagen){
+        // Verifica si ya existe un slider con el mismo título para el usuario autenticado, excluyendo el slider actual
+        $isValid = Slider::where("user_id", auth()->id())
+                         ->where("id", "<>", $id)
+                         ->where("title", $request->title)
+                         ->first();
+
+        if ($isValid) {
+            return response()->json(["message" => 403, "message_text" => "Ya existe un slider con este título."]);
+        }
+
+        if ($request->hasFile("image")) {
+            if ($slider->imagen) {
                 Storage::delete($slider->imagen);
             }
             $path = Storage::putFile("sliders", $request->file("image"));

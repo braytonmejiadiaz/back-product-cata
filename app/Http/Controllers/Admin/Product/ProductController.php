@@ -82,9 +82,13 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {
-        $isValid = Product::where("title", $request->title)->first();
+        // Verifica si ya existe un producto con el mismo título para el usuario autenticado
+        $isValid = Product::where("user_id", auth()->id())
+                          ->where("title", $request->title)
+                          ->first();
+
         if ($isValid) {
-            return response()->json(["message" => 403, "message_text" => "El nombre del producto ya existe"]);
+            return response()->json(["message" => 403, "message_text" => "Ya existe un producto con este título."]);
         }
 
         if ($request->hasFile("portada")) {
@@ -112,8 +116,8 @@ class ProductController extends Controller
 
         // Verifica que el producto al que se le está agregando la imagen sea del usuario autenticado
         $product = Product::where('id', $product_id)
-            ->where('user_id', auth()->id())
-            ->firstOrFail();
+                          ->where('user_id', auth()->id())
+                          ->firstOrFail();
 
         if ($request->hasFile("imagen_add")) {
             $path = Storage::putFile("products", $request->file("imagen_add"));
@@ -150,14 +154,17 @@ class ProductController extends Controller
     public function update(Request $request, string $id)
     {
         $product = Product::where('id', $id)
-            ->where('user_id', auth()->id())
-            ->firstOrFail();
+                          ->where('user_id', auth()->id())
+                          ->firstOrFail();
 
-        $isValid = Product::where("id", "<>", $id)
-            ->where("title", $request->title)
-            ->first();
+        // Verifica si ya existe un producto con el mismo título para el usuario autenticado, excluyendo el producto actual
+        $isValid = Product::where("user_id", auth()->id())
+                          ->where("id", "<>", $id)
+                          ->where("title", $request->title)
+                          ->first();
+
         if ($isValid) {
-            return response()->json(["message" => 403, "message_text" => "El nombre del producto ya existe"]);
+            return response()->json(["message" => 403, "message_text" => "Ya existe un producto con este título."]);
         }
 
         if ($request->hasFile("portada")) {
