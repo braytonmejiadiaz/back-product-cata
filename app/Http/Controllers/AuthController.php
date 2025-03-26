@@ -101,7 +101,7 @@ class AuthController extends Controller
             // Crear la suscripción en MercadoPago
             $preapprovalClient = new PreApprovalClient();
             $preapprovalData = [
-                "back_url" => "http://localhost:4200/ingresar", // URL de redirección después del pago
+                "back_url" => "https://app.treggio.co/ingresar", // URL de redirección después del pago
                 "payer_email" => $user->email,
                 "reason" => "Suscripción al plan " . $plan->name,
                 "auto_recurring" => [
@@ -131,7 +131,7 @@ class AuthController extends Controller
             // Devolver la URL de pago al frontend
             return response()->json([
                 'user' => $user,
-                'url_tienda' => "http://localhost:4200/{$user->slug}",
+                'url_tienda' => "https://app.treggio.co/{$user->slug}",
                 'payment_url' => $subscription->init_point, // URL de pago de MercadoPago
             ], 201);
 
@@ -212,7 +212,7 @@ class AuthController extends Controller
 
         return response()->json([
             "message" => 200,
-            "url_tienda" => "http://localhost:4200/{$user->slug}" // Devuelve la nueva URL de la tienda
+            "url_tienda" => "https://app.treggio.co/{$user->slug}" // Devuelve la nueva URL de la tienda
         ]);
     }
 
