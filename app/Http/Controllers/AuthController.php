@@ -49,7 +49,7 @@ class AuthController extends Controller
             'surname' => 'required',
             'phone' => 'required',
             'email' => 'required|email|unique:users',
-            'password' => 'required',
+            'password' => 'required|min:8',
             'store_name' => 'required',
             'plan_id' => 'required|exists:plans,id',
         ]);
@@ -89,13 +89,14 @@ class AuthController extends Controller
         $user->save();
 
         // Obtener el plan seleccionado
+        Log::info('Configurando MercadoPago para suscripción...');
+        MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
+
         $plan = Plan::find(request()->plan_id);
         if (!$plan) {
-            return response()->json(['error' => 'Plan no encontrado'], 404);
+            Log::error('El plan no existe.', ['plan_id' => request()->plan_id]);
+            return response()->json(['error' => 'Plan no encontrado'], 400);
         }
-
-        // Configurar MercadoPago
-        MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
 
         try {
             // Crear la suscripción en MercadoPago
@@ -114,6 +115,8 @@ class AuthController extends Controller
                 ]
             ];
 
+            Log::info('Enviando datos a MercadoPago:', ['payload' => $preapprovalData]);
+
             $subscription = $preapprovalClient->create($preapprovalData);
 
             if (!isset($subscription->id)) {
@@ -121,19 +124,14 @@ class AuthController extends Controller
                 return response()->json(['error' => 'No se pudo generar la suscripción'], 500);
             }
 
-            // Asociar el plan al usuario
-            $user->plan_id = $plan->id;
-            $user->save();
+            Log::info('Suscripción creada con éxito', ['subscription_id' => $subscription->id]);
 
-            // Enviar correo de verificación
-            Mail::to(request()->email)->send(new VerifiedMail($user));
-
-            // Devolver la URL de pago al frontend
+            // ✅ **Devolver la URL de pago al frontend**
             return response()->json([
-                'user' => $user,
-                'url_tienda' => "https://app.treggio.co/{$user->slug}",
-                'payment_url' => $subscription->init_point, // URL de pago de MercadoPago
-            ], 201);
+                'message' => 'Suscripción creada',
+                'subscription' => $subscription,
+                'payment_url' => $subscription->init_point // <-- Aquí enviamos la URL correcta
+            ], 200);
 
         } catch (MPApiException $e) {
             Log::error('Error en MercadoPago', [
@@ -142,15 +140,8 @@ class AuthController extends Controller
                 'response' => $e->getApiResponse()
             ]);
             return response()->json(['error' => 'Error en MercadoPago: ' . $e->getMessage()], 500);
-        } catch (\Exception $e) {
-            Log::error('Error interno', [
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ]);
-            return response()->json(['error' => 'Error interno: ' . $e->getMessage()], 500);
         }
-    }
+}
 
 
     public function update(Request $request) {
