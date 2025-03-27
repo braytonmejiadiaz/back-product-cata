@@ -36,6 +36,11 @@ class HomeController extends Controller
             return $path;
         }
 
+        // Si es una cadena base64 (empieza con data:image), devolverla tal cual
+        if (strpos($path, 'data:image') === 0) {
+            return $path;
+        }
+
         // Si comienza con storage/, usar Storage::url
         if (strpos($path, 'storage/') === 0) {
             return Storage::url($path);
