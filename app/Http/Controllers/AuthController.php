@@ -49,7 +49,7 @@ class AuthController extends Controller
             'surname' => 'required',
             'phone' => 'required',
             'email' => 'required|email|unique:users',
-            'password' => 'required|min:8',
+            'password' => 'required',
             'store_name' => 'required',
             'plan_id' => 'required|exists:plans,id',
         ]);
