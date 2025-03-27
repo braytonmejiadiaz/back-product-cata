@@ -153,68 +153,154 @@ class AuthController extends Controller
     }
 
 
+    // public function update(Request $request) {
+    //     $user = User::find(auth("api")->user()->id);
+
+    //     if ($request->has('store_name') && $request->store_name !== $user->store_name) {
+    //         $slug = Str::slug($request->store_name);
+    //         $originalSlug = $slug;
+    //         $counter = 1;
+
+    //         while (User::where('slug', $slug)->where('id', '<>', $user->id)->exists()) {
+    //             $slug = $originalSlug . '-' . $counter;
+    //             $counter++;
+    //         }
+
+    //         $request->merge(['slug' => $slug]);
+    //     }
+
+    //     if ($request->has('phone')) {
+    //         $phone = $request->phone;
+    //         if (!str_starts_with($phone, '57')) {
+    //             $phone = '57' . $phone;
+    //         }
+    //         $request->merge(['phone' => $phone]);
+    //     }
+
+    //     if ($request->has('password')) {
+    //         $user->update([
+    //             "password" => bcrypt($request->password)
+    //         ]);
+    //         return response()->json([
+    //             "message" => 200,
+    //         ]);
+    //     }
+
+    //     $is_exists_email = User::where("id", "<>", auth("api")->user()->id)
+    //                             ->where("email", $request->email)->first();
+    //     if ($is_exists_email) {
+    //         return response()->json([
+    //             "message" => 403,
+    //             "message_text" => "El usuario ya existe"
+    //         ]);
+    //     }
+
+    //     if ($request->hasFile("file_imagen")) {
+    //         if ($user->avatar) {
+    //             Storage::delete($user->avatar);
+    //         }
+    //         $path = Storage::putFile("users", $request->file("file_imagen"));
+    //         $request->merge(["avatar" => $path]);
+    //     }
+
+    //     $user->update($request->all());
+
+    //     return response()->json([
+    //         "message" => 200,
+    //         "url_tienda" => "https://app.treggio.co/{$user->slug}"
+    //     ]);
+    // }
+
+
     public function update(Request $request) {
         $user = User::find(auth("api")->user()->id);
 
-        // Verificar si el nombre de la tienda ha cambiado
+        // Validación de campos
+        $request->validate([
+            'email' => 'required|email|unique:users,email,' . $user->id,
+            'store_name' => 'sometimes|string|max:255',
+            'phone' => 'sometimes|string|max:20',
+            'avatar' => 'sometimes|base64image|max:2048', // Valida Base64 (crearemos esta regla)
+        ]);
+
+        // 1. Generar slug si cambia el store_name
         if ($request->has('store_name') && $request->store_name !== $user->store_name) {
-            $slug = Str::slug($request->store_name);
-            $originalSlug = $slug;
-            $counter = 1;
-
-            // Verificar si el slug ya existe
-            while (User::where('slug', $slug)->where('id', '<>', $user->id)->exists()) {
-                $slug = $originalSlug . '-' . $counter;
-                $counter++;
-            }
-
+            $slug = $this->generateUniqueSlug($request->store_name, $user->id);
             $request->merge(['slug' => $slug]);
         }
 
-        // Formatear el número de teléfono si se actualiza
+        // 2. Formatear teléfono
         if ($request->has('phone')) {
-            $phone = $request->phone;
-            if (!str_starts_with($phone, '57')) {
-                $phone = '57' . $phone;
-            }
-            $request->merge(['phone' => $phone]);
+            $request->merge(['phone' => $this->formatPhone($request->phone)]);
         }
 
+        // 3. Manejo de contraseña (sin cambios)
         if ($request->has('password')) {
-            $user->update([
-                "password" => bcrypt($request->password)
-            ]);
-            return response()->json([
-                "message" => 200,
-            ]);
+            $user->update(["password" => bcrypt($request->password)]);
+            return response()->json(["message" => 200]);
         }
 
-        // Verificar si el email ya existe
-        $is_exists_email = User::where("id", "<>", auth("api")->user()->id)
-                                ->where("email", $request->email)->first();
-        if ($is_exists_email) {
-            return response()->json([
-                "message" => 403,
-                "message_text" => "El usuario ya existe"
-            ]);
-        }
-
-        // Manejar la imagen de avatar si se actualiza
-        if ($request->hasFile("file_imagen")) {
-            if ($user->avatar) {
-                Storage::delete($user->avatar);
-            }
-            $path = Storage::putFile("users", $request->file("file_imagen"));
+        // 4. Procesar avatar (Base64 o archivo)
+        if ($request->has('avatar') && str_starts_with($request->avatar, 'data:image')) {
+            $path = $this->saveBase64Image($request->avatar, 'users', $user->avatar);
             $request->merge(["avatar" => $path]);
         }
 
-        $user->update($request->all());
+        // 5. Actualizar datos
+        $user->update($request->except(['password', 'file_imagen']));
 
         return response()->json([
             "message" => 200,
-            "url_tienda" => "https://app.treggio.co/{$user->slug}" // Devuelve la nueva URL de la tienda
+            "avatar_url" => Storage::url($user->avatar), // URL pública
+            "url_tienda" => "https://app.treggio.co/tienda/{$user->slug}"
         ]);
     }
+
+    // -------------------------------
+    // Métodos auxiliares (privados)
+    // -------------------------------
+
+    private function generateUniqueSlug($storeName, $userId): string {
+        $slug = Str::slug($storeName);
+        $originalSlug = $slug;
+        $counter = 1;
+
+        while (User::where('slug', $slug)->where('id', '<>', $userId)->exists()) {
+            $slug = $originalSlug . '-' . $counter;
+            $counter++;
+        }
+
+        return $slug;
+    }
+
+    private function formatPhone($phone): string {
+        return str_starts_with($phone, '57') ? $phone : '57' . $phone;
+    }
+
+    private function saveBase64Image($base64, $folder, $oldPath = null): string {
+        // Eliminar el prefijo "data:image/..."
+        $imageData = explode(',', $base64)[1];
+        $decodedImage = base64_decode($imageData);
+
+        // Determinar el tipo MIME
+        $mime = finfo_buffer(finfo_open(), $decodedImage, FILEINFO_MIME_TYPE);
+        $extension = explode('/', $mime)[1] ?? 'png';
+
+        // Generar nombre único
+        $filename = $folder . '/' . Str::uuid() . '.' . $extension;
+
+        // Eliminar imagen anterior si existe
+        if ($oldPath && Storage::exists($oldPath)) {
+            Storage::delete($oldPath);
+        }
+
+        // Guardar en storage
+        Storage::put($filename, $decodedImage);
+
+        return $filename;
+    }
+
+
 
     public function verified_email(Request $request){
         $user = User::where("email",$request->email)->first();
