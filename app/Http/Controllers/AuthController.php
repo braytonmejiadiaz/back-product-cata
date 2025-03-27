@@ -43,106 +43,103 @@ class AuthController extends Controller
      * @return \Illuminate\Http\JsonResponse
      */
     public function register()
-    {
-        $validator = Validator::make(request()->all(), [
-            'name' => 'required',
-            'surname' => 'required',
-            'phone' => 'required',
-            'email' => 'required|email|unique:users',
-            'password' => 'required|min:8',
-            'store_name' => 'required',
-            'plan_id' => 'required|exists:plans,id',
-        ]);
+{
+    $validator = Validator::make(request()->all(), [
+        'name' => 'required',
+        'surname' => 'required',
+        'phone' => 'required',
+        'email' => 'required|email|unique:users',
+        'password' => 'required|min:8',
+        'store_name' => 'required',
+        'plan_id' => 'required|exists:plans,id',
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json($validator->errors()->toJson(), 400);
+    if ($validator->fails()) {
+        return response()->json($validator->errors()->toJson(), 400);
+    }
+
+    // Obtener el plan seleccionado
+    $plan = Plan::find(request()->plan_id);
+    if (!$plan) {
+        Log::error('El plan no existe.', ['plan_id' => request()->plan_id]);
+        return response()->json(['error' => 'Plan no encontrado'], 400);
+    }
+
+    // Configurar MercadoPago
+    MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
+
+    try {
+        // 1. PRIMERO crear la suscripción en MercadoPago
+        $preapprovalClient = new PreApprovalClient();
+        $preapprovalData = [
+            "back_url" => "https://app.treggio.co/ingresar",
+            "payer_email" => request()->email,
+            "external_reference" => "temp_" . uniqid(), // Referencia temporal
+            "reason" => "Suscripción al plan " . $plan->name,
+            "auto_recurring" => [
+                "frequency" => 1,
+                "frequency_type" => "months",
+                "transaction_amount" => (float) $plan->price,
+                "currency_id" => "COP",
+                "start_date" => now()->addDay()->toISOString(), // Comienza mañana
+                "end_date" => now()->addYears(2)->toISOString(),
+            ]
+        ];
+
+        Log::info('Creando suscripción en MercadoPago...');
+        $subscription = $preapprovalClient->create($preapprovalData);
+
+        if (!isset($subscription->id)) {
+            Log::error('Error en MercadoPago: No se generó ID de suscripción.');
+            return response()->json(['error' => 'No se pudo generar la suscripción'], 500);
         }
 
-        // Formatear el número de teléfono
+        Log::info('Suscripción creada con éxito', ['subscription_id' => $subscription->id]);
+
+        // 2. SOLO SI MercadoPago responde con éxito, crear el usuario
         $phone = request()->phone;
         if (!str_starts_with($phone, '57')) {
             $phone = '57' . $phone;
         }
 
-        // Generar un slug único
-        $slug = Str::slug(request()->store_name);
-        $originalSlug = $slug;
-        $counter = 1;
+        $slug = $this->generateUniqueSlug(request()->store_name);
 
-        // Verificar si el slug ya existe
-        while (User::where('slug', $slug)->exists()) {
-            $slug = $originalSlug . '-' . $counter;
-            $counter++;
-        }
+        $user = User::create([
+            'name' => request()->name,
+            'surname' => request()->surname,
+            'phone' => $phone,
+            'type_user' => 1,
+            'email' => request()->email,
+            'uniqd' => uniqid(),
+            'store_name' => request()->store_name,
+            'slug' => $slug,
+            'password' => bcrypt(request()->password),
+            'plan_id' => $plan->id,
+            'mercadopago_subscription_id' => $subscription->id // Guardar ID de suscripción
+        ]);
 
-        // Crear el usuario
-        $user = new User;
-        $user->name = request()->name;
-        $user->surname = request()->surname;
-        $user->phone = $phone;
-        $user->type_user = 1;
-        $user->email = request()->email;
-        $user->uniqd = uniqid();
-        $user->store_name = request()->store_name;
-        $user->slug = $slug;
-        $user->password = bcrypt(request()->password);
-        $user->save();
+        // 3. Devolver URL de pago al frontend
+        return response()->json([
+            'message' => 'Por favor completa el pago para activar tu cuenta',
+            'payment_url' => $subscription->init_point,
+            'subscription_id' => $subscription->id
+        ], 200);
 
-        // Obtener el plan seleccionado
-        Log::info('Configurando MercadoPago para suscripción...');
-        MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
-
-        $plan = Plan::find(request()->plan_id);
-        if (!$plan) {
-            Log::error('El plan no existe.', ['plan_id' => request()->plan_id]);
-            return response()->json(['error' => 'Plan no encontrado'], 400);
-        }
-
-        try {
-            // Crear la suscripción en MercadoPago
-            $preapprovalClient = new PreApprovalClient();
-            $preapprovalData = [
-                "back_url" => "https://app.treggio.co/ingresar", // URL de redirección después del pago
-                "payer_email" => $user->email,
-                "reason" => "Suscripción al plan " . $plan->name,
-                "auto_recurring" => [
-                    "frequency" => 1,
-                    "frequency_type" => "months",
-                    "transaction_amount" => (float) $plan->price,
-                    "currency_id" => "COP",
-                    "start_date" => now()->toISOString(),
-                    "end_date" => now()->addYear(2)->toISOString(),
-                ]
-            ];
-
-            Log::info('Enviando datos a MercadoPago:', ['payload' => $preapprovalData]);
-
-            $subscription = $preapprovalClient->create($preapprovalData);
-
-            if (!isset($subscription->id)) {
-                Log::error('Error en MercadoPago: No se generó ID de suscripción.', ['response' => $subscription]);
-                return response()->json(['error' => 'No se pudo generar la suscripción'], 500);
-            }
-
-            Log::info('Suscripción creada con éxito', ['subscription_id' => $subscription->id]);
-
-            // ✅ **Devolver la URL de pago al frontend**
-            return response()->json([
-                'message' => 'Suscripción creada',
-                'subscription' => $subscription,
-                'payment_url' => $subscription->init_point // <-- Aquí enviamos la URL correcta
-            ], 200);
-
-        } catch (MPApiException $e) {
-            Log::error('Error en MercadoPago', [
-                'message' => $e->getMessage(),
-                'status' => $e->getHttpStatusCode(),
-                'response' => $e->getApiResponse()
-            ]);
-            return response()->json(['error' => 'Error en MercadoPago: ' . $e->getMessage()], 500);
-        }
+    } catch (MPApiException $e) {
+        Log::error('Error en MercadoPago', [
+            'message' => $e->getMessage(),
+            'status' => $e->getHttpStatusCode()
+        ]);
+        return response()->json(['error' => 'Error en el procesamiento de pago: ' . $e->getMessage()], 500);
+    } catch (\Exception $e) {
+        Log::error('Error general en registro', [
+            'message' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine()
+        ]);
+        return response()->json(['error' => 'Error en el registro: ' . $e->getMessage()], 500);
+    }
 }
-
 
     public function update(Request $request) {
         $user = User::find(auth("api")->user()->id);
