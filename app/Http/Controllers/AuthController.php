@@ -141,6 +141,24 @@ class AuthController extends Controller
     }
 }
 
+/**
+ * Generate a unique slug for store
+ */
+private function generateUniqueSlug($storeName)
+{
+    $slug = Str::slug($storeName);
+    $originalSlug = $slug;
+    $counter = 1;
+
+    while (User::where('slug', $slug)->exists()) {
+        $slug = $originalSlug . '-' . $counter;
+        $counter++;
+    }
+
+    return $slug;
+}
+
+
     public function update(Request $request) {
         $user = User::find(auth("api")->user()->id);
 
