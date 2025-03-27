@@ -19,6 +19,32 @@ use App\Http\Resources\Ecommerce\Product\ProductEcommerceCollection;
 
 class HomeController extends Controller
 {
+    /**
+     * Obtiene la URL completa para una imagen
+     *
+     * @param string|null $path
+     * @return string|null
+     */
+    private function getFullImageUrl(?string $path): ?string
+    {
+        if (!$path) {
+            return null;
+        }
+
+        // Si ya es una URL completa, no hacer nada
+        if (filter_var($path, FILTER_VALIDATE_URL)) {
+            return $path;
+        }
+
+        // Si comienza con storage/, usar Storage::url
+        if (strpos($path, 'storage/') === 0) {
+            return Storage::url($path);
+        }
+
+        // Si es una ruta relativa, construir la URL completa
+        return config('app.url') . '/storage/' . ltrim($path, '/');
+    }
+
     public function getUserDataBySlug(string $slug)
     {
         $user = User::where('slug', $slug)->first();
@@ -33,7 +59,7 @@ class HomeController extends Controller
             'surname' => $user->surname,
             'phone' => $user->phone,
             'uniqd' => $user->uniqd,
-            'avatar' => $user->avatar ? Storage::url($user->avatar) : null,
+            'avatar' => $this->getFullImageUrl($user->avatar),
             'fb' => $user->fb,
             'ins' => $user->ins,
             'tikTok' => $user->tikTok,
@@ -51,7 +77,7 @@ class HomeController extends Controller
             'deleted_at' => $user->deleted_at,
             'store_name' => $user->store_name,
             'slug' => $user->slug,
-            'popup' => $user->popup,
+            'popup' => $this->getFullImageUrl($user->popup),
             'menu_color' => $user->menu_color,
             'button_color' => $user->button_color,
             'mision' => $user->mision,
@@ -94,7 +120,7 @@ class HomeController extends Controller
             'user' => [
                 'name' => $user->name,
                 'store_name' => $user->store_name,
-                'avatar' => $user->avatar ? Storage::url($user->avatar) : null,
+                'avatar' => $this->getFullImageUrl($user->avatar),
                 'bio' => $user->bio,
                 'mision' => $user->mision,
                 'vision' => $user->vision,
@@ -106,7 +132,7 @@ class HomeController extends Controller
                     "title" => $slider->title,
                     "subtitle" => $slider->subtitle,
                     "label" => $slider->label,
-                    "imagen" => $slider->imagen ? Storage::url($slider->imagen) : null,
+                    "imagen" => $this->getFullImageUrl($slider->imagen),
                     "link" => $slider->link,
                     "state" => $slider->state,
                     "color" => $slider->color,
@@ -120,7 +146,7 @@ class HomeController extends Controller
                     "id" => $categorie->id,
                     "name" => $categorie->name,
                     "products_count" => $categorie->product_categorie_firsts_count,
-                    "imagen" => $categorie->imagen ? Storage::url($categorie->imagen) : null,
+                    "imagen" => $this->getFullImageUrl($categorie->imagen),
                 ];
             }),
         ]);
@@ -143,7 +169,7 @@ class HomeController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'store_name' => $user->store_name,
-                'avatar' => $user->avatar ? Storage::url($user->avatar) : null,
+                'avatar' => $this->getFullImageUrl($user->avatar),
                 'bio' => $user->bio,
             ],
             'productos' => ProductEcommerceCollection::make($productos),
@@ -153,7 +179,7 @@ class HomeController extends Controller
                     "title" => $slider->title,
                     "subtitle" => $slider->subtitle,
                     "label" => $slider->label,
-                    "imagen" => $slider->imagen ? Storage::url($slider->imagen) : null,
+                    "imagen" => $this->getFullImageUrl($slider->imagen),
                     "link" => $slider->link,
                     "state" => $slider->state,
                     "color" => $slider->color,
@@ -167,7 +193,7 @@ class HomeController extends Controller
                     "id" => $categorie->id,
                     "name" => $categorie->name,
                     "products_count" => $categorie->product_categorie_firsts_count,
-                    "imagen" => $categorie->imagen ? Storage::url($categorie->imagen) : null,
+                    "imagen" => $this->getFullImageUrl($categorie->imagen),
                 ];
             }),
         ]);
@@ -190,7 +216,7 @@ class HomeController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'store_name' => $user->store_name,
-                'avatar' => $user->avatar ? Storage::url($user->avatar) : null,
+                'avatar' => $this->getFullImageUrl($user->avatar),
                 'bio' => $user->bio,
             ],
             'productos' => ProductEcommerceCollection::make($productos),
@@ -200,7 +226,7 @@ class HomeController extends Controller
                     "title" => $slider->title,
                     "subtitle" => $slider->subtitle,
                     "label" => $slider->label,
-                    "imagen" => $slider->imagen ? Storage::url($slider->imagen) : null,
+                    "imagen" => $this->getFullImageUrl($slider->imagen),
                     "link" => $slider->link,
                     "state" => $slider->state,
                     "color" => $slider->color,
@@ -214,7 +240,7 @@ class HomeController extends Controller
                     "id" => $categorie->id,
                     "name" => $categorie->name,
                     "products_count" => $categorie->product_categorie_firsts_count,
-                    "imagen" => $categorie->imagen ? Storage::url($categorie->imagen) : null,
+                    "imagen" => $this->getFullImageUrl($categorie->imagen),
                 ];
             }),
         ]);
@@ -235,7 +261,7 @@ class HomeController extends Controller
                 "id" => $categorie->id,
                 "name" => $categorie->name,
                 "products_count" => $categorie->product_categorie_firsts_count,
-                "imagen" => $categorie->imagen ? Storage::url($categorie->imagen) : null,
+                "imagen" => $this->getFullImageUrl($categorie->imagen),
             ];
         }));
     }
@@ -256,7 +282,7 @@ class HomeController extends Controller
                 return [
                     "id" => $slider->id,
                     "title" => $slider->title,
-                    "imagen" => $slider->imagen ? Storage::url($slider->imagen) : null,
+                    "imagen" => $this->getFullImageUrl($slider->imagen),
                 ];
             });
 
@@ -308,7 +334,7 @@ class HomeController extends Controller
                 'description' => $product->description,
                 'price_cop' => $product->price_cop,
                 'tags' => $product->tags,
-                'imagen' => $product->imagen ? Storage::url($product->imagen) : null,
+                'imagen' => $this->getFullImageUrl($product->imagen),
                 'brand' => $product->brand ? [
                     'id' => $product->brand->id,
                     'name' => $product->brand->name,
@@ -328,7 +354,7 @@ class HomeController extends Controller
                 'images' => $product->images->map(function ($image) {
                     return [
                         'id' => $image->id,
-                        'imagen' => $image->imagen ? Storage::url($image->imagen) : null,
+                        'imagen' => $this->getFullImageUrl($image->imagen),
                     ];
                 }),
                 'variations' => $variations,
