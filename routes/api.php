@@ -50,7 +50,6 @@ Route::group([
     Route::post('/mercadopago/webhook', [AuthController::class, 'webhook'])->name('mercadopago.webhook');
 
 
-
     Route::post('/register', [AuthController::class, 'register'])->name('register');
     Route::post('/login', [AuthController::class, 'login'])->name('login');
     Route::post('/login_ecommerce', [AuthController::class, 'login_ecommerce'])->name('login_ecommerce');
