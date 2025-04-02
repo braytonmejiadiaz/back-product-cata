@@ -32,7 +32,7 @@ class AuthController extends Controller
     public function __construct()
     {
         $this->middleware('auth:api', ['except' => ['login', 'register','login_ecommerce','verified_auth',
-        'verified_email','verified_code','new_password', 'webhook'
+        'verified_email','verified_code','new_password', 'webhook', 'getCountries'
         ]]);
     }
 
@@ -52,10 +52,17 @@ class AuthController extends Controller
         'password' => 'required|min:8',
         'store_name' => 'required',
         'plan_id' => 'required|exists:plans,id',
+        'country_code' => 'required|string',
     ]);
 
     if ($validator->fails()) {
         return response()->json($validator->errors()->toJson(), 400);
+    }
+
+    // Validar que el código del país exista en la lista
+    $country = collect($this->countries)->firstWhere('dial_code', request()->country_code);
+        if (!$country) {
+            return response()->json(['error' => 'Código de país no válido'], 400);
     }
 
     // Obtener el plan seleccionado
@@ -96,11 +103,8 @@ class AuthController extends Controller
 
         Log::info('Suscripción creada con éxito', ['subscription_id' => $subscription->id]);
 
-        // 2. SOLO SI MercadoPago responde con éxito, crear el usuario
-        $phone = request()->phone;
-        if (!str_starts_with($phone, '57')) {
-            $phone = '57' . $phone;
-        }
+        // Concatenar el código del país con el número de teléfono
+        $phone = request()->country_code . request()->phone;
 
         $slug = $this->generateUniqueSlug(request()->store_name);
 
@@ -421,4 +425,35 @@ public function webhook(Request $request)
 
       return response()->json(['status' => 'success'], 200);
     }
+
+
+    public $countries = [
+        ['name' => 'CO', 'dial_code' => '57'],
+        ['name' => 'AR', 'dial_code' => '54'],
+        ['name' => 'BO', 'dial_code' => '591'],
+        ['name' => 'BR', 'dial_code' => '55'],
+        ['name' => 'CL', 'dial_code' => '56'],
+        ['name' => 'CR', 'dial_code' => '506'],
+        ['name' => 'CU', 'dial_code' => '53'],
+        ['name' => 'EC', 'dial_code' => '593'],
+        ['name' => 'SV', 'dial_code' => '503'],
+        ['name' => 'ES', 'dial_code' => '34'],
+        ['name' => 'GT', 'dial_code' => '502'],
+        ['name' => 'HN', 'dial_code' => '504'],
+        ['name' => 'MX', 'dial_code' => '52'],
+        ['name' => 'NI', 'dial_code' => '505'],
+        ['name' => 'PA', 'dial_code' => '507'],
+        ['name' => 'PY', 'dial_code' => '595'],
+        ['name' => 'PE', 'dial_code' => '51'],
+        ['name' => 'DO', 'dial_code' => '1'],
+        ['name' => 'UY', 'dial_code' => '598'],
+        ['name' => 'VE', 'dial_code' => '58'],
+    ];
+
+    public function getCountries()
+    {
+    return response()->json($this->countries);
+    }
+
+
 }
