@@ -181,14 +181,20 @@ private function generateUniqueSlug($storeName)
             $request->merge(['slug' => $slug]);
         }
 
-        // Formatear el número de teléfono si se actualiza
-        if ($request->has('phone')) {
-            $phone = $request->phone;
-            if (!str_starts_with($phone, '57')) {
-                $phone = '57' . $phone;
+            // Formatear el número de teléfono si se actualiza
+            if ($request->has('phone')) {
+                // Extraer el código de país actual del teléfono (los primeros dígitos antes del número)
+                $currentPhone = $user->phone;
+                $countryCode = substr($currentPhone, 0, strlen($currentPhone) - strlen($request->phone));
+
+                // Si no se puede extraer el código de país, usar el del request si existe, o mantener el actual
+                if (empty($countryCode) && $request->has('country_code')) {
+                    $countryCode = $request->country_code;
+                }
+
+                $phone = $countryCode . $request->phone;
+                $request->merge(['phone' => $phone]);
             }
-            $request->merge(['phone' => $phone]);
-        }
 
         if ($request->has('password')) {
             $user->update([
