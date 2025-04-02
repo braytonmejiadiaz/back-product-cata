@@ -89,7 +89,7 @@ class AuthController extends Controller
                 "transaction_amount" => (float) $plan->price,
                 "currency_id" => "COP",
                 "start_date" => now()->addDay()->toISOString(), // Comienza mañana
-                "end_date" => now()->addYears(2)->toISOString(),
+                "end_date" => now()->addYears(1)->toISOString(),
             ]
         ];
 
