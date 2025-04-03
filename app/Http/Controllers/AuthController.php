@@ -88,7 +88,7 @@ class AuthController extends Controller
                 "frequency_type" => "months",
                 "transaction_amount" => (float) $plan->price,
                 "currency_id" => "COP",
-                "start_date" => now()->addDay()->toISOString(), // Comienza mañana
+                "start_date" => now()->addDay(10)->toISOString(), // Comienza en 10 dias
                 "end_date" => now()->addYears(1)->toISOString(),
             ]
         ];
