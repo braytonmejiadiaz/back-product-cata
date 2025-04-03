@@ -14,12 +14,12 @@ class Slider extends Model
     use SoftDeletes;
     protected $fillable = [
         "title",
-        "subtitle",
+        // "subtitle",
         "label",
         "imagen",
-        "link",
+        // "link",
         "state",
-        "color",
+        // "color",
         "type_slider",
         "price_original",
         "price_campaing",

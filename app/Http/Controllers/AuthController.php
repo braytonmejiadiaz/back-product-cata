@@ -331,6 +331,7 @@ private function generateUniqueSlug($storeName)
             'vision' => $user->vision,
             'menu_color' => $user->menu_color,
             'button_color' => $user->button_color,
+            'button_radio' => $user->button_radio,
         ]);
     }
 
@@ -437,7 +438,6 @@ public function webhook(Request $request)
         ['name' => 'CO', 'dial_code' => '57'],
         ['name' => 'AR', 'dial_code' => '54'],
         ['name' => 'BO', 'dial_code' => '591'],
-        ['name' => 'BR', 'dial_code' => '55'],
         ['name' => 'CL', 'dial_code' => '56'],
         ['name' => 'CR', 'dial_code' => '506'],
         ['name' => 'CU', 'dial_code' => '53'],

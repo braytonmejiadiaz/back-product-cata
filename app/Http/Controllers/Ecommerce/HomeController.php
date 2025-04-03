@@ -87,6 +87,7 @@ class HomeController extends Controller
             'button_color' => $user->button_color,
             'mision' => $user->mision,
             'vision' => $user->vision,
+            'button_radio' => $user->button_radio,
         ]);
     }
 

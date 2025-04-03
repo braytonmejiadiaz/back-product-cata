@@ -47,7 +47,8 @@ class User extends Authenticatable implements JWTSubject
         "button_color",
         "mision",
         "vision",
-        "plan_id"
+        "plan_id",
+        "button_radio",
     ];
 
     /**
