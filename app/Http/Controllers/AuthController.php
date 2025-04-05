@@ -369,64 +369,79 @@ public function webhook(Request $request)
 
     $type = $request->get('type');
 
-    if (str_contains($type, 'preapproval')) {
+    // Compatibilidad adicional
+    if (!$type && $request->has('topic')) {
+        $type = $request->get('topic');
+    }
+
+    if (in_array($type, ['preapproval', 'subscription_preapproval'])) {
         Log::info('Tipo de evento reconocido como preapproval o subscription_preapproval');
 
         MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
         $client = new PreApprovalClient();
 
         try {
-            $preapprovalId = $request->get('data')['id'];
+            $preapprovalId = $request->get('data')['id'] ?? $request->get('data_id');
             Log::info('ID de preapproval recibido', ['preapproval_id' => $preapprovalId]);
 
             $subscription = $client->get($preapprovalId);
             Log::info('Datos de suscripción obtenidos desde MercadoPago', ['status' => $subscription->status]);
 
-            if ($subscription->status === 'authorized') {
-                Log::info('Suscripción autorizada, procesando external_reference');
+            switch ($subscription->status) {
+                case 'authorized':
+                    $external = json_decode($subscription->external_reference, true);
 
-                $external = json_decode($subscription->external_reference, true);
-
-                if (!is_array($external)) {
-                    Log::error('external_reference no es un array válido', ['external_reference' => $subscription->external_reference]);
-                    return response()->json(['error' => 'external_reference inválido'], 400);
-                }
-
-                $requiredFields = ['email', 'name', 'surname', 'phone', 'store_name', 'slug', 'password', 'plan_id'];
-                foreach ($requiredFields as $field) {
-                    if (empty($external[$field])) {
-                        Log::error("Falta el campo requerido: $field", $external);
-                        return response()->json(['error' => "Falta el campo requerido: $field"], 400);
+                    if (!is_array($external)) {
+                        Log::error('external_reference no es un array válido', ['external_reference' => $subscription->external_reference]);
+                        return response()->json(['error' => 'external_reference inválido'], 400);
                     }
-                }
 
-                if (!User::where('email', $external['email'])->exists()) {
-                    $user = User::create([
-                        'name' => $external['name'],
-                        'surname' => $external['surname'],
-                        'phone' => $external['phone'],
-                        'type_user' => 1,
-                        'email' => $external['email'],
-                        'uniqd' => uniqid(),
-                        'store_name' => $external['store_name'],
-                        'slug' => $external['slug'],
-                        'password' => bcrypt($external['password']),
-                        'plan_id' => $external['plan_id'],
-                        'mercadopago_subscription_id' => $subscription->id
-                    ]);
+                    $requiredFields = ['email', 'name', 'surname', 'phone', 'store_name', 'slug', 'password', 'plan_id'];
+                    foreach ($requiredFields as $field) {
+                        if (empty($external[$field])) {
+                            Log::error("Falta el campo requerido: $field", $external);
+                            return response()->json(['error' => "Falta el campo requerido: $field"], 400);
+                        }
+                    }
 
-                    Log::info('✅ Usuario creado exitosamente después de suscripción', ['user_id' => $user->id]);
-                } else {
-                    Log::info('ℹ️ El usuario ya existía', ['email' => $external['email']]);
-                }
-            } else {
-                Log::warning('Suscripción recibida, pero no está autorizada aún', ['status' => $subscription->status]);
+                    if (!User::where('email', $external['email'])->exists()) {
+                        $user = User::create([
+                            'name' => $external['name'],
+                            'surname' => $external['surname'],
+                            'phone' => $external['phone'],
+                            'type_user' => 1,
+                            'email' => $external['email'],
+                            'uniqd' => uniqid(),
+                            'store_name' => $external['store_name'],
+                            'slug' => $external['slug'],
+                            'password' => bcrypt($external['password']),
+                            'plan_id' => $external['plan_id'],
+                            'mercadopago_subscription_id' => $subscription->id
+                        ]);
+
+                        Log::info('✅ Usuario creado exitosamente después de suscripción', ['user_id' => $user->id]);
+                    } else {
+                        Log::info('ℹ️ El usuario ya existía', ['email' => $external['email']]);
+                    }
+                    break;
+
+                case 'pending':
+                    Log::warning('⏳ Suscripción recibida, pero no está autorizada aún', ['status' => $subscription->status]);
+                    break;
+
+                case 'cancelled':
+                    Log::warning('❌ Suscripción cancelada por el usuario o rechazada por el banco', ['status' => $subscription->status]);
+                    break;
+
+                default:
+                    Log::warning('📛 Estado desconocido de suscripción', ['status' => $subscription->status]);
+                    break;
             }
 
             return response()->json(['status' => 'ok'], 200);
 
         } catch (\Exception $e) {
-            Log::error('❌ Error procesando webhook de MercadoPago', [
+            Log::error('🔥 Error procesando webhook de MercadoPago', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
@@ -437,6 +452,7 @@ public function webhook(Request $request)
     Log::info('🔁 Evento ignorado por tipo no manejado', ['type' => $type]);
     return response()->json(['message' => 'Tipo de evento no manejado'], 200);
 }
+
 
 
 
