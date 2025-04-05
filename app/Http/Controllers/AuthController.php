@@ -42,39 +42,43 @@ class AuthController extends Controller
      *
      * @return \Illuminate\Http\JsonResponse
      */
-    public function register(Request $request)
+
+     public function register(Request $request)
 {
     $validator = Validator::make($request->all(), [
-        'name' => 'required',
-        'surname' => 'required',
-        'phone' => 'required',
+        'name' => 'required|string|max:255',
+        'surname' => 'required|string|max:255',
+        'phone' => 'required|string',
         'email' => 'required|email|unique:users',
-        'password' => 'required',
-        'store_name' => 'required',
+        'password' => 'required|string|min:8',
+        'store_name' => 'required|string|max:255',
         'plan_id' => 'required|exists:plans,id',
         'country_code' => 'required|string',
     ]);
 
     if ($validator->fails()) {
-        return response()->json($validator->errors()->toJson(), 400);
+        return response()->json($validator->errors(), 400);
     }
 
-    // Validar código de país
     $country = collect($this->countries)->firstWhere('dial_code', $request->country_code);
     if (!$country) {
         return response()->json(['error' => 'Código de país no válido'], 400);
     }
 
-    $plan = Plan::find($request->plan_id);
+    $plan = Plan::findOrFail($request->plan_id);
 
     MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
 
     try {
         $preapprovalClient = new PreApprovalClient();
+
+        // Generar un ID único para esta transacción
+        $transactionId = 'treggio_' . uniqid();
+
         $preapprovalData = [
-            "back_url" => "https://app.treggio.co/ingresar",
+            "back_url" => env('APP_URL') . "/ingresar",
             "payer_email" => $request->email,
-            "external_reference" => uniqid('ref_'), // para poder usarlo en el webhook
+            "external_reference" => $transactionId,
             "reason" => "Suscripción al plan " . $plan->name,
             "auto_recurring" => [
                 "frequency" => 1,
@@ -83,7 +87,20 @@ class AuthController extends Controller
                 "currency_id" => "COP",
                 "start_date" => now()->addDay(10)->toISOString(),
                 "end_date" => now()->addYears(1)->toISOString(),
-            ]
+            ],
+            "payment_methods_allowed" => [
+                "payment_types" => [
+                    ["id" => "credit_card"],
+                    ["id" => "debit_card"],
+                ],
+                "payment_methods" => [
+                    ["id" => "visa"],
+                    ["id" => "master"],
+                    ["id" => "amex"],
+                ]
+            ],
+            "notification_url" => env('APP_URL') . "/api/webhook",
+            "status" => "authorized"
         ];
 
         $subscription = $preapprovalClient->create($preapprovalData);
@@ -92,8 +109,9 @@ class AuthController extends Controller
             return response()->json(['error' => 'No se pudo generar la suscripción'], 500);
         }
 
-        // Guardar en cache temporal o base de datos (aquí usamos archivo temporal como ejemplo)
-        Storage::put("pending_users/{$subscription->id}.json", json_encode([
+        // Guardar datos del usuario en caché por 24 horas (1440 minutos)
+        \Cache::put('pending_user_' . $subscription->id, [
+            'transaction_id' => $transactionId,
             'name' => $request->name,
             'surname' => $request->surname,
             'phone' => $request->country_code . $request->phone,
@@ -102,18 +120,31 @@ class AuthController extends Controller
             'store_name' => $request->store_name,
             'plan_id' => $plan->id,
             'country_code' => $request->country_code,
-        ]));
+        ], now()->addMinutes(1440));
 
         return response()->json([
-            'message' => 'Redirigiendo a la pasarela de pago...',
+            'success' => true,
+            'message' => 'Redirigiendo a Mercado Pago...',
             'payment_url' => $subscription->init_point,
-            'subscription_id' => $subscription->id
+            'subscription_id' => $subscription->id,
+            'transaction_id' => $transactionId
         ]);
+
+    } catch (\MPApiException $e) {
+        \Log::error('Error de Mercado Pago', [
+            'status' => $e->getApiResponse()->getStatusCode(),
+            'response' => $e->getApiResponse()->getContent()
+        ]);
+        return response()->json([
+            'error' => 'Error en Mercado Pago: ' . $e->getMessage()
+        ], 500);
     } catch (\Exception $e) {
-        return response()->json(['error' => 'Error en el registro: ' . $e->getMessage()], 500);
+        \Log::error('Error en registro', ['error' => $e->getMessage()]);
+        return response()->json([
+            'error' => 'Error en el registro: ' . $e->getMessage()
+        ], 500);
     }
 }
-
 
 /**
  * Generate a unique slug for store
@@ -391,105 +422,90 @@ private function generateUniqueSlug($storeName)
     }
 
 
-
-
-
     public function webhook(Request $request)
     {
+        \Log::info('Webhook recibido:', $request->all());
+
         MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
 
-        $data = $request->all();
-        \Log::info('Webhook recibido:', $data);
-
-        // Manejar diferentes formatos de webhook
-        $eventType = $data['type'] ?? ($data['topic'] ?? null);
-
-        // Solo procesar eventos de suscripción o pago
-        if (!in_array($eventType, ['subscription_preapproval', 'payment', 'preapproval'])) {
-            \Log::info('Evento no manejado:', ['type' => $eventType]);
-            return response()->json(['message' => 'Evento no manejado'], 200);
-        }
-
         try {
-            // Obtener el ID de la suscripción de diferentes formas según el evento
-            $subscriptionId = $data['data']['id'] ?? $data['id'] ?? null;
+            $data = $request->all();
+            $eventType = $data['type'] ?? ($data['topic'] ?? null);
+            $subscriptionId = $data['data']['id'] ?? $data['id'] ?? $data['data_id'] ?? null;
 
             if (!$subscriptionId) {
-                \Log::error('No se pudo obtener el ID de suscripción', ['data' => $data]);
+                \Log::error('ID de suscripción no encontrado en webhook');
                 return response()->json(['error' => 'ID de suscripción no encontrado'], 400);
             }
 
-            // Si es un evento de pago, verificar si está aprobado
-            if ($eventType === 'payment') {
-                $paymentId = $data['data']['id'] ?? null;
-                if ($paymentId) {
-                    $paymentClient = new PaymentClient();
-                    $payment = $paymentClient->get($paymentId);
-
-                    if ($payment->status === 'approved') {
-                        // Buscar usuario por external_reference o email
-                        $payerEmail = $payment->payer->email ?? null;
-                        if ($payerEmail) {
-                            $user = User::where('email', $payerEmail)->first();
-                            if ($user) {
-                                Mail::to($user->email)->send(new VerifiedMail($user));
-                                \Log::info('Correo enviado por pago aprobado', ['email' => $user->email]);
-                            }
-                        }
-                    }
-                }
-                return response()->json(['message' => 'Evento de pago procesado'], 200);
-            }
-
-            // Para eventos de suscripción
-            $preapprovalClient = new PreApprovalClient();
-            $subscription = $preapprovalClient->get($subscriptionId);
-
-            \Log::info('Estado de suscripción:', ['status' => $subscription->status, 'id' => $subscription->id]);
-
-            // Verificar si el usuario ya existe
-            if (User::where('mercadopago_subscription_id', $subscription->id)->exists()) {
-                \Log::info("Usuario ya registrado para la suscripción: {$subscription->id}");
-                return response()->json(['message' => 'Usuario ya registrado'], 200);
-            }
-
-            // Solo procesar si la suscripción está autorizada
-            if ($subscription->status !== 'authorized') {
-                \Log::info("Suscripción no autorizada: {$subscription->id} - Estado: {$subscription->status}");
-                return response()->json(['message' => 'Suscripción no autorizada'], 200);
-            }
-
-            // Cargar datos del usuario desde almacenamiento temporal
-            $path = "pending_users/{$subscription->id}.json";
-
-            if (!Storage::exists($path)) {
-                \Log::error("No se encontró la data del usuario para la suscripción {$subscription->id}");
-                return response()->json(['error' => 'Datos del usuario no encontrados'], 404);
-            }
-
-            $userData = json_decode(Storage::get($path), true);
+            // Obtener datos del usuario pendiente desde caché
+            $userData = \Cache::get('pending_user_' . $subscriptionId);
 
             if (!$userData) {
-                \Log::error("Datos del usuario corruptos o vacíos para la suscripción {$subscription->id}");
-                return response()->json(['error' => 'Datos del usuario corruptos'], 400);
+                \Log::error('Datos de usuario pendiente no encontrados para suscripción: ' . $subscriptionId);
+                return response()->json(['error' => 'Datos de usuario no encontrados'], 404);
             }
 
-            // Validar campos obligatorios
-            $requiredFields = ['name', 'surname', 'phone', 'email', 'password', 'store_name', 'plan_id'];
-            foreach ($requiredFields as $field) {
-                if (empty($userData[$field])) {
-                    \Log::error("Campo requerido faltante: {$field} para la suscripción {$subscription->id}");
-                    return response()->json(['error' => "Campo {$field} faltante en los datos del usuario"], 400);
-                }
+            // Manejar diferentes tipos de eventos
+            switch ($eventType) {
+                case 'subscription_preapproval':
+                case 'preapproval':
+                    return $this->processSubscription($subscriptionId, $data, $userData);
+
+                case 'payment':
+                    return $this->processPayment($data, $userData);
+
+                default:
+                    \Log::info('Evento no manejado:', ['type' => $eventType]);
+                    return response()->json(['message' => 'Evento no manejado'], 200);
+            }
+
+        } catch (\MPApiException $e) {
+            \Log::error('Error de API Mercado Pago en webhook', [
+                'status' => $e->getApiResponse()->getStatusCode(),
+                'response' => $e->getApiResponse()->getContent()
+            ]);
+            return response()->json(['error' => 'Error en Mercado Pago: ' . $e->getMessage()], 500);
+        } catch (\Exception $e) {
+            \Log::error('Error en webhook', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json(['error' => 'Error al procesar webhook'], 500);
+        }
+    }
+
+    protected function processSubscription($subscriptionId, $data, $userData)
+    {
+        $preapprovalClient = new PreApprovalClient();
+        $subscription = $preapprovalClient->get($subscriptionId);
+
+        \Log::info('Estado de suscripción:', [
+            'status' => $subscription->status,
+            'id' => $subscription->id,
+            'external_reference' => $subscription->external_reference ?? null
+        ]);
+
+        // Verificar que la referencia externa coincida
+        if (($subscription->external_reference ?? null) !== ($userData['transaction_id'] ?? null)) {
+            \Log::error('La referencia externa no coincide', [
+                'expected' => $userData['transaction_id'],
+                'received' => $subscription->external_reference
+            ]);
+            return response()->json(['error' => 'Referencia externa no válida'], 400);
+        }
+
+        // Si la suscripción está autorizada, crear el usuario
+        if ($subscription->status === 'authorized') {
+            // Verificar si el usuario ya existe
+            if (User::where('email', $userData['email'])->exists()) {
+                \Log::info('Usuario ya existe: ' . $userData['email']);
+                \Cache::forget('pending_user_' . $subscriptionId);
+                return response()->json(['message' => 'Usuario ya registrado'], 200);
             }
 
             // Crear slug único
             $slug = $this->generateUniqueSlug($userData['store_name']);
-
-            // Hashear la contraseña si no está hasheada
-            if (!preg_match('/^\$2[ayb]\$.{56}$/', $userData['password'])) {
-                $userData['password'] = Hash::make($userData['password']);
-            }
 
             // Crear el usuario
             $user = User::create([
@@ -502,14 +518,14 @@ private function generateUniqueSlug($storeName)
                 'slug' => $slug,
                 'type_user' => 1,
                 'plan_id' => $userData['plan_id'],
-                'mercadopago_subscription_id' => $subscription->id,
+                'mercadopago_subscription_id' => $subscriptionId,
                 'email_verified_at' => now(),
             ]);
 
             // Enviar email de confirmación
             try {
                 Mail::to($user->email)->send(new VerifiedMail($user));
-                \Log::info('Correo enviado a nuevo usuario', ['email' => $user->email]);
+                \Log::info('Correo de verificación enviado a: ' . $user->email);
             } catch (\Exception $e) {
                 \Log::error('Error al enviar correo', [
                     'email' => $user->email,
@@ -517,25 +533,63 @@ private function generateUniqueSlug($storeName)
                 ]);
             }
 
-            // Eliminar archivo temporal
-            Storage::delete($path);
+            // Eliminar datos de caché
+            \Cache::forget('pending_user_' . $subscriptionId);
 
-            \Log::info("Usuario creado correctamente por webhook", [
+            \Log::info('Usuario creado exitosamente', [
                 'user_id' => $user->id,
-                'email' => $user->email,
-                'subscription_id' => $subscription->id
+                'email' => $user->email
             ]);
 
             return response()->json(['message' => 'Usuario registrado exitosamente'], 200);
-
-        } catch (\Exception $e) {
-            \Log::error('Error en webhook de suscripción', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'data' => $data
-            ]);
-            return response()->json(['error' => 'Error al procesar webhook'], 500);
         }
+
+        // Si la suscripción fue cancelada, limpiar caché
+        if ($subscription->status === 'cancelled') {
+            \Cache::forget('pending_user_' . $subscriptionId);
+            \Log::info('Suscripción cancelada, datos pendientes eliminados');
+            return response()->json(['message' => 'Suscripción cancelada'], 200);
+        }
+
+        // Para otros estados (pending, paused, etc.)
+        return response()->json(['message' => 'Suscripción en estado: ' . $subscription->status], 200);
+    }
+
+    protected function processPayment($data, $userData)
+    {
+        $paymentId = $data['data']['id'] ?? null;
+        if (!$paymentId) {
+            \Log::error('ID de pago no encontrado en webhook');
+            return response()->json(['error' => 'ID de pago no encontrado'], 400);
+        }
+
+        $paymentClient = new PaymentClient();
+        $payment = $paymentClient->get($paymentId);
+
+        \Log::info('Estado de pago:', [
+            'status' => $payment->status,
+            'id' => $payment->id,
+            'external_reference' => $payment->external_reference ?? null
+        ]);
+
+        // Si el pago está aprobado, verificar si el usuario existe y notificar
+        if ($payment->status === 'approved') {
+            $user = User::where('email', $userData['email'])->first();
+
+            if ($user) {
+                try {
+                    Mail::to($user->email)->send(new VerifiedMail($user));
+                    \Log::info('Correo de confirmación enviado por pago aprobado');
+                } catch (\Exception $e) {
+                    \Log::error('Error al enviar correo', [
+                        'email' => $user->email,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+        }
+
+        return response()->json(['message' => 'Evento de pago procesado'], 200);
     }
 
 }
