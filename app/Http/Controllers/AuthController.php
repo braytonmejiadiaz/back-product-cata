@@ -363,35 +363,83 @@ private function generateUniqueSlug($storeName)
         "message_text" => "No se encontró una imagen de popup"
     ]);
 }
+    public $countries = [
+        ['name' => 'CO', 'dial_code' => '57'],
+        ['name' => 'AR', 'dial_code' => '54'],
+        ['name' => 'BO', 'dial_code' => '591'],
+        ['name' => 'CL', 'dial_code' => '56'],
+        ['name' => 'CR', 'dial_code' => '506'],
+        ['name' => 'CU', 'dial_code' => '53'],
+        ['name' => 'EC', 'dial_code' => '593'],
+        ['name' => 'SV', 'dial_code' => '503'],
+        ['name' => 'ES', 'dial_code' => '34'],
+        ['name' => 'GT', 'dial_code' => '502'],
+        ['name' => 'HN', 'dial_code' => '504'],
+        ['name' => 'MX', 'dial_code' => '52'],
+        ['name' => 'NI', 'dial_code' => '505'],
+        ['name' => 'PA', 'dial_code' => '507'],
+        ['name' => 'PY', 'dial_code' => '595'],
+        ['name' => 'PE', 'dial_code' => '51'],
+        ['name' => 'DO', 'dial_code' => '1'],
+        ['name' => 'UY', 'dial_code' => '598'],
+        ['name' => 'VE', 'dial_code' => '58'],
+    ];
 
-public function webhook(Request $request)
+    public function getCountries()
+    {
+    return response()->json($this->countries);
+    }
+
+
+
+
+
+
+    public function webhook(Request $request)
 {
     MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
 
     $data = $request->all();
-
     \Log::info('Webhook recibido:', $data);
 
-    if (!isset($data['type']) || $data['type'] !== 'preapproval') {
-        \Log::info('Evento no manejado:', ['type' => $data['type'] ?? 'no definido']);
+    // Manejar diferentes formatos de webhook de MercadoPago
+    $eventType = $data['type'] ?? ($data['topic'] ?? null);
+
+    // Eventos que nos interesan (suscription_preapproval o payment para suscripciones)
+    if (!in_array($eventType, ['subscription_preapproval', 'payment', 'preapproval'])) {
+        \Log::info('Evento no manejado:', ['type' => $eventType]);
         return response()->json(['message' => 'Evento no manejado'], 200);
     }
 
-    $preapprovalClient = new PreApprovalClient();
     try {
-        $subscriptionId = $data['data']['id'] ?? null;
-        if (!$subscriptionId) {
-            \Log::error('ID de suscripción no encontrado en los datos');
-            return response()->json(['error' => 'ID de suscripción no proporcionado'], 400);
+        // Obtener el ID de la suscripción según el tipo de evento
+        $subscriptionId = null;
+
+        if ($eventType === 'subscription_preapproval' || $eventType === 'preapproval') {
+            $subscriptionId = $data['data']['id'] ?? null;
+        } elseif ($eventType === 'payment') {
+            // Para eventos de payment, necesitamos obtener la suscripción asociada
+            $paymentId = $data['data']['id'] ?? $data['resource'] ?? null;
+            if ($paymentId) {
+                $paymentClient = new PaymentClient();
+                $payment = $paymentClient->get($paymentId);
+                $subscriptionId = $payment->metadata->subscription_id ?? null;
+            }
         }
 
+        if (!$subscriptionId) {
+            \Log::error('No se pudo obtener el ID de suscripción');
+            return response()->json(['error' => 'ID de suscripción no encontrado'], 400);
+        }
+
+        $preapprovalClient = new PreApprovalClient();
         $subscription = $preapprovalClient->get($subscriptionId);
 
         \Log::info('Estado de suscripción:', ['status' => $subscription->status, 'id' => $subscription->id]);
 
-        // Verificar si la suscripción está autorizada o activa (MercadoPago puede usar diferentes estados)
-        if (!in_array($subscription->status, ['authorized', 'active'])) {
-            \Log::info("Suscripción no autorizada/activa aún: {$subscription->id} - Estado: {$subscription->status}");
+        // Verificar si la suscripción está autorizada o activa
+        if (!in_array($subscription->status, ['authorized', 'active', 'pending'])) {
+            \Log::info("Suscripción no lista: {$subscription->id} - Estado: {$subscription->status}");
             return response()->json(['message' => 'Suscripción aún no activa'], 200);
         }
 
@@ -444,7 +492,7 @@ public function webhook(Request $request)
             'type_user' => 1,
             'plan_id' => $userData['plan_id'],
             'mercadopago_subscription_id' => $subscription->id,
-            'email_verified_at' => now(), // Verificar email automáticamente
+            'email_verified_at' => now(),
         ]);
 
         // Eliminar archivo temporal
@@ -456,48 +504,16 @@ public function webhook(Request $request)
             'subscription_id' => $subscription->id
         ]);
 
-        // Opcional: Enviar email de bienvenida
-        // Mail::to($user->email)->send(new WelcomeEmail($user));
-
         return response()->json(['message' => 'Usuario registrado exitosamente'], 200);
 
     } catch (\Exception $e) {
         \Log::error('Error en webhook de suscripción', [
             'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
+            'trace' => $e->getTraceAsString(),
+            'data' => $data
         ]);
         return response()->json(['error' => 'Error al procesar webhook'], 500);
     }
 }
-
-
-
-    public $countries = [
-        ['name' => 'CO', 'dial_code' => '57'],
-        ['name' => 'AR', 'dial_code' => '54'],
-        ['name' => 'BO', 'dial_code' => '591'],
-        ['name' => 'CL', 'dial_code' => '56'],
-        ['name' => 'CR', 'dial_code' => '506'],
-        ['name' => 'CU', 'dial_code' => '53'],
-        ['name' => 'EC', 'dial_code' => '593'],
-        ['name' => 'SV', 'dial_code' => '503'],
-        ['name' => 'ES', 'dial_code' => '34'],
-        ['name' => 'GT', 'dial_code' => '502'],
-        ['name' => 'HN', 'dial_code' => '504'],
-        ['name' => 'MX', 'dial_code' => '52'],
-        ['name' => 'NI', 'dial_code' => '505'],
-        ['name' => 'PA', 'dial_code' => '507'],
-        ['name' => 'PY', 'dial_code' => '595'],
-        ['name' => 'PE', 'dial_code' => '51'],
-        ['name' => 'DO', 'dial_code' => '1'],
-        ['name' => 'UY', 'dial_code' => '598'],
-        ['name' => 'VE', 'dial_code' => '58'],
-    ];
-
-    public function getCountries()
-    {
-    return response()->json($this->countries);
-    }
-
 
 }
