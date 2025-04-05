@@ -41,7 +41,7 @@ Route::group([
     // 'middleware' => 'auth:api',
     'prefix' => 'auth'
 ], function ($router) {
-
+    Route::post('/mercadopago/webhook', [AuthController::class, 'webhook']);
     Route::post('/create-preference', [SubscriptionController::class, 'createPreference']);
     Route::get('/plans', [PlanController::class, 'index']);
     Route::get('payment/success', [AuthController::class, 'paymentSuccess'])->name('payment.success');
