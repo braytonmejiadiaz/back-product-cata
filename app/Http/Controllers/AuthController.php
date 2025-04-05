@@ -122,9 +122,6 @@ class AuthController extends Controller
             'mercadopago_subscription_id' => $subscription->id // Guardar ID de suscripción
         ]);
 
-
-
-
         // 3. Devolver URL de pago al frontend
         return response()->json([
             'message' => 'Por favor completa el pago para activar tu cuenta',
@@ -417,21 +414,13 @@ public function webhook(Request $request)
                 // Buscar el usuario por su email
                 $payerEmail = $payment->payer->email ?? null;
 
-
-
-
-
                 if ($payerEmail) {
                     $user = User::where('email', $payerEmail)->first();
-
 
                     if ($user) {
                         // Enviar email de confirmación
                         Mail::to($user->email)->send(new VerifiedMail($user));
                         Log::info('Correo enviado a usuario', ['email' => $user->email]);
-
-
-
                     }
                 }
             }
