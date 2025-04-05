@@ -1,7 +1,5 @@
 <?php
-
 namespace App\Http\Controllers;
-
 use Validator;
 use App\Models\User;
 use App\Models\Plan;
@@ -103,24 +101,23 @@ class AuthController extends Controller
 
         Log::info('Suscripción creada con éxito', ['subscription_id' => $subscription->id]);
 
-        // Concatenar el código del país con el número de teléfono
-        $phone = request()->country_code . request()->phone;
-
-        $slug = $this->generateUniqueSlug(request()->store_name);
-
-        $user = User::create([
+         // 2. Guardar los datos del usuario temporalmente (sin crear el usuario aún)
+        $userData = [
             'name' => request()->name,
             'surname' => request()->surname,
-            'phone' => $phone,
+            'phone' => request()->country_code . request()->phone,
             'type_user' => 1,
             'email' => request()->email,
             'uniqd' => uniqid(),
             'store_name' => request()->store_name,
-            'slug' => $slug,
+            'slug' => $this->generateUniqueSlug(request()->store_name),
             'password' => bcrypt(request()->password),
             'plan_id' => $plan->id,
-            'mercadopago_subscription_id' => $subscription->id // Guardar ID de suscripción
-        ]);
+            'mercadopago_subscription_id' => $subscription->id
+        ];
+
+        // Esto es solo un ejemplo - implementa según tu infraestructura
+        Cache::put('temp_user_' . $subscription->id, $userData, now()->addHours(24));
 
         // 3. Devolver URL de pago al frontend
         return response()->json([
@@ -398,40 +395,44 @@ public function webhook(Request $request)
 {
     Log::info('Webhook recibido', ['data' => $request->all()]);
 
-    // Verificar si es una notificación de pago
     if ($request->has('type') && $request->type === 'payment' && isset($request->data['id'])) {
         $paymentId = $request->data['id'];
 
-        // Configurar Mercado Pago
         MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
 
-        // Obtener detalles del pago
         try {
-            $client = new PaymentClient();  // Usamos PaymentClient en vez de Payment::get()
+            $client = new PaymentClient();
             $payment = $client->get($paymentId);
 
             if ($payment && $payment->status === 'approved') {
-                // Buscar el usuario por su email
-                $payerEmail = $payment->payer->email ?? null;
+                // Obtener el ID de suscripción asociado al pago
+                $subscriptionId = $payment->metadata->subscription_id ?? null;
 
-                if ($payerEmail) {
-                    $user = User::where('email', $payerEmail)->first();
+                if ($subscriptionId) {
+                    // Recuperar los datos del usuario temporal
+                    $userData = Cache::get('temp_user_' . $subscriptionId);
 
-                    if ($user) {
+                    if ($userData) {
+                        // Crear el usuario en la base de datos
+                        $user = User::create($userData);
+
                         // Enviar email de confirmación
                         Mail::to($user->email)->send(new VerifiedMail($user));
-                        Log::info('Correo enviado a usuario', ['email' => $user->email]);
+                        Log::info('Usuario creado y correo enviado', ['email' => $user->email]);
+
+                        // Limpiar los datos temporales
+                        Cache::forget('temp_user_' . $subscriptionId);
                     }
                 }
             }
         } catch (\Exception $e) {
-            Log::error('Error al obtener el pago de Mercado Pago', ['error' => $e->getMessage()]);
+            Log::error('Error al procesar el webhook', ['error' => $e->getMessage()]);
             return response()->json(['status' => 'error', 'message' => 'Error al procesar el pago'], 500);
         }
     }
 
-      return response()->json(['status' => 'success'], 200);
-    }
+    return response()->json(['status' => 'success'], 200);
+}
 
 
     public $countries = [
