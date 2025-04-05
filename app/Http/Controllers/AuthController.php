@@ -19,6 +19,7 @@ use MercadoPago\Client\Payment\PaymentClient;
 use MercadoPago\Resources\Payment;
 use MercadoPago\Resources\Preference\Item;
 use MercadoPago\Client\Preference\PreferenceClient;
+use Illuminate\Support\Facades\Cache;
 
 class AuthController extends Controller
 {
