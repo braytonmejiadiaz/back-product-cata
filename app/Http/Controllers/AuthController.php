@@ -42,7 +42,8 @@ class AuthController extends Controller
      *
      * @return \Illuminate\Http\JsonResponse
      */
-    public function register()
+
+     public function register()
 {
     $validator = Validator::make(request()->all(), [
         'name' => 'required',
@@ -59,70 +60,43 @@ class AuthController extends Controller
         return response()->json($validator->errors()->toJson(), 400);
     }
 
-    // Validar que el código del país exista en la lista
     $country = collect($this->countries)->firstWhere('dial_code', request()->country_code);
-        if (!$country) {
-            return response()->json(['error' => 'Código de país no válido'], 400);
+    if (!$country) {
+        return response()->json(['error' => 'Código de país no válido'], 400);
     }
 
-    // Obtener el plan seleccionado
     $plan = Plan::find(request()->plan_id);
-    if (!$plan) {
-        Log::error('El plan no existe.', ['plan_id' => request()->plan_id]);
-        return response()->json(['error' => 'Plan no encontrado'], 400);
-    }
 
-    // Configurar MercadoPago
     MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
 
     try {
-        // 1. PRIMERO crear la suscripción en MercadoPago
         $preapprovalClient = new PreApprovalClient();
         $preapprovalData = [
             "back_url" => "https://app.treggio.co/ingresar",
             "payer_email" => request()->email,
-            "external_reference" => "temp_" . uniqid(), // Referencia temporal
+            "external_reference" => json_encode([
+                'email' => request()->email,
+                'name' => request()->name,
+                'surname' => request()->surname,
+                'phone' => request()->country_code . request()->phone,
+                'store_name' => request()->store_name,
+                'password' => bcrypt(request()->password),
+                'plan_id' => $plan->id,
+                'slug' => $this->generateUniqueSlug(request()->store_name),
+            ]),
             "reason" => "Suscripción al plan " . $plan->name,
             "auto_recurring" => [
                 "frequency" => 1,
                 "frequency_type" => "months",
                 "transaction_amount" => (float) $plan->price,
                 "currency_id" => "COP",
-                "start_date" => now()->addDay(10)->toISOString(), // Comienza en 10 dias
+                "start_date" => now()->addDay(10)->toISOString(),
                 "end_date" => now()->addYears(1)->toISOString(),
             ]
         ];
 
-        Log::info('Creando suscripción en MercadoPago...');
         $subscription = $preapprovalClient->create($preapprovalData);
 
-        if (!isset($subscription->id)) {
-            Log::error('Error en MercadoPago: No se generó ID de suscripción.');
-            return response()->json(['error' => 'No se pudo generar la suscripción'], 500);
-        }
-
-        Log::info('Suscripción creada con éxito', ['subscription_id' => $subscription->id]);
-
-        // Concatenar el código del país con el número de teléfono
-        $phone = request()->country_code . request()->phone;
-
-        $slug = $this->generateUniqueSlug(request()->store_name);
-
-        $user = User::create([
-            'name' => request()->name,
-            'surname' => request()->surname,
-            'phone' => $phone,
-            'type_user' => 1,
-            'email' => request()->email,
-            'uniqd' => uniqid(),
-            'store_name' => request()->store_name,
-            'slug' => $slug,
-            'password' => bcrypt(request()->password),
-            'plan_id' => $plan->id,
-            'mercadopago_subscription_id' => $subscription->id // Guardar ID de suscripción
-        ]);
-
-        // 3. Devolver URL de pago al frontend
         return response()->json([
             'message' => 'Por favor completa el pago para activar tu cuenta',
             'payment_url' => $subscription->init_point,
@@ -135,15 +109,9 @@ class AuthController extends Controller
             'status' => $e->getHttpStatusCode()
         ]);
         return response()->json(['error' => 'Error en el procesamiento de pago: ' . $e->getMessage()], 500);
-    } catch (\Exception $e) {
-        Log::error('Error general en registro', [
-            'message' => $e->getMessage(),
-            'file' => $e->getFile(),
-            'line' => $e->getLine()
-        ]);
-        return response()->json(['error' => 'Error en el registro: ' . $e->getMessage()], 500);
     }
 }
+
 
 /**
  * Generate a unique slug for store
@@ -396,42 +364,56 @@ private function generateUniqueSlug($storeName)
 
 public function webhook(Request $request)
 {
-    Log::info('Webhook recibido', ['data' => $request->all()]);
+    Log::info('Webhook recibido', $request->all());
 
-    // Verificar si es una notificación de pago
-    if ($request->has('type') && $request->type === 'payment' && isset($request->data['id'])) {
-        $paymentId = $request->data['id'];
+    $type = $request->get('type');
 
-        // Configurar Mercado Pago
+    if ($type === 'preapproval') {
         MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
+        $client = new PreApprovalClient();
 
-        // Obtener detalles del pago
         try {
-            $client = new PaymentClient();  // Usamos PaymentClient en vez de Payment::get()
-            $payment = $client->get($paymentId);
+            $preapprovalId = $request->get('data')['id'];
+            $subscription = $client->get($preapprovalId);
 
-            if ($payment && $payment->status === 'approved') {
-                // Buscar el usuario por su email
-                $payerEmail = $payment->payer->email ?? null;
+            if ($subscription->status === 'authorized') {
+                $external = json_decode($subscription->external_reference, true);
 
-                if ($payerEmail) {
-                    $user = User::where('email', $payerEmail)->first();
+                // Verifica si el usuario ya existe (por si acaso)
+                if (!User::where('email', $external['email'])->exists()) {
+                    $user = User::create([
+                        'name' => $external['name'],
+                        'surname' => $external['surname'],
+                        'phone' => $external['phone'],
+                        'type_user' => 1,
+                        'email' => $external['email'],
+                        'uniqd' => uniqid(),
+                        'store_name' => $external['store_name'],
+                        'slug' => $external['slug'],
+                        'password' => $external['password'],
+                        'plan_id' => $external['plan_id'],
+                        'mercadopago_subscription_id' => $subscription->id
+                    ]);
 
-                    if ($user) {
-                        // Enviar email de confirmación
-                        Mail::to($user->email)->send(new VerifiedMail($user));
-                        Log::info('Correo enviado a usuario', ['email' => $user->email]);
-                    }
+                    Log::info('Usuario creado exitosamente después de confirmación de suscripción', ['user_id' => $user->id]);
+                } else {
+                    Log::info('El usuario ya existía', ['email' => $external['email']]);
                 }
+            } else {
+                Log::warning('Suscripción no autorizada aún', ['status' => $subscription->status]);
             }
+
+            return response()->json(['status' => 'ok'], 200);
+
         } catch (\Exception $e) {
-            Log::error('Error al obtener el pago de Mercado Pago', ['error' => $e->getMessage()]);
-            return response()->json(['status' => 'error', 'message' => 'Error al procesar el pago'], 500);
+            Log::error('Error procesando webhook de MercadoPago', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Error procesando el webhook'], 500);
         }
     }
 
-      return response()->json(['status' => 'success'], 200);
-    }
+    return response()->json(['message' => 'Tipo de evento no manejado'], 200);
+}
+
 
 
     public $countries = [
