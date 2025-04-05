@@ -370,21 +370,34 @@ public function webhook(Request $request)
 
     $data = $request->all();
 
+    \Log::info('Webhook recibido:', $data);
+
     if (!isset($data['type']) || $data['type'] !== 'preapproval') {
+        \Log::info('Evento no manejado:', ['type' => $data['type'] ?? 'no definido']);
         return response()->json(['message' => 'Evento no manejado'], 200);
     }
 
     $preapprovalClient = new PreApprovalClient();
     try {
-        $subscription = $preapprovalClient->get($data['data']['id']);
+        $subscriptionId = $data['data']['id'] ?? null;
+        if (!$subscriptionId) {
+            \Log::error('ID de suscripción no encontrado en los datos');
+            return response()->json(['error' => 'ID de suscripción no proporcionado'], 400);
+        }
 
-        if ($subscription->status !== 'authorized') {
-            Log::info("Suscripción no autorizada aún: {$subscription->id}");
+        $subscription = $preapprovalClient->get($subscriptionId);
+
+        \Log::info('Estado de suscripción:', ['status' => $subscription->status, 'id' => $subscription->id]);
+
+        // Verificar si la suscripción está autorizada o activa (MercadoPago puede usar diferentes estados)
+        if (!in_array($subscription->status, ['authorized', 'active'])) {
+            \Log::info("Suscripción no autorizada/activa aún: {$subscription->id} - Estado: {$subscription->status}");
             return response()->json(['message' => 'Suscripción aún no activa'], 200);
         }
 
         // Buscar si ya existe un usuario con esa suscripción
         if (User::where('mercadopago_subscription_id', $subscription->id)->exists()) {
+            \Log::info("Usuario ya registrado para la suscripción: {$subscription->id}");
             return response()->json(['message' => 'Usuario ya registrado'], 200);
         }
 
@@ -392,14 +405,33 @@ public function webhook(Request $request)
         $path = "pending_users/{$subscription->id}.json";
 
         if (!Storage::exists($path)) {
-            Log::error("No se encontró la data del usuario para la suscripción {$subscription->id}");
+            \Log::error("No se encontró la data del usuario para la suscripción {$subscription->id}");
             return response()->json(['error' => 'Datos del usuario no encontrados'], 404);
         }
 
         $userData = json_decode(Storage::get($path), true);
 
+        if (!$userData) {
+            \Log::error("Datos del usuario corruptos o vacíos para la suscripción {$subscription->id}");
+            return response()->json(['error' => 'Datos del usuario corruptos'], 400);
+        }
+
+        // Validar campos obligatorios
+        $requiredFields = ['name', 'surname', 'phone', 'email', 'password', 'store_name', 'plan_id'];
+        foreach ($requiredFields as $field) {
+            if (empty($userData[$field])) {
+                \Log::error("Campo requerido faltante: {$field} para la suscripción {$subscription->id}");
+                return response()->json(['error' => "Campo {$field} faltante en los datos del usuario"], 400);
+            }
+        }
+
         // Crear slug único
         $slug = $this->generateUniqueSlug($userData['store_name']);
+
+        // Hashear la contraseña si no está hasheada
+        if (!preg_match('/^\$2[ayb]\$.{56}$/', $userData['password'])) {
+            $userData['password'] = Hash::make($userData['password']);
+        }
 
         $user = User::create([
             'name' => $userData['name'],
@@ -412,17 +444,28 @@ public function webhook(Request $request)
             'type_user' => 1,
             'plan_id' => $userData['plan_id'],
             'mercadopago_subscription_id' => $subscription->id,
+            'email_verified_at' => now(), // Verificar email automáticamente
         ]);
 
         // Eliminar archivo temporal
         Storage::delete($path);
 
-        Log::info("Usuario creado correctamente por webhook", ['user_id' => $user->id]);
+        \Log::info("Usuario creado correctamente por webhook", [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'subscription_id' => $subscription->id
+        ]);
+
+        // Opcional: Enviar email de bienvenida
+        // Mail::to($user->email)->send(new WelcomeEmail($user));
 
         return response()->json(['message' => 'Usuario registrado exitosamente'], 200);
 
     } catch (\Exception $e) {
-        Log::error('Error en webhook de suscripción', ['error' => $e->getMessage()]);
+        \Log::error('Error en webhook de suscripción', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
         return response()->json(['error' => 'Error al procesar webhook'], 500);
     }
 }
