@@ -379,7 +379,21 @@ public function webhook(Request $request)
             if ($subscription->status === 'authorized') {
                 $external = json_decode($subscription->external_reference, true);
 
-                // Verifica si el usuario ya existe (por si acaso)
+                if (!is_array($external)) {
+                    Log::error('external_reference no es un array válido', ['external_reference' => $subscription->external_reference]);
+                    return response()->json(['error' => 'external_reference inválido'], 400);
+                }
+
+                // Validación básica de datos requeridos
+                $requiredFields = ['email', 'name', 'surname', 'phone', 'store_name', 'slug', 'password', 'plan_id'];
+                foreach ($requiredFields as $field) {
+                    if (empty($external[$field])) {
+                        Log::error("Falta el campo requerido: $field", $external);
+                        return response()->json(['error' => "Falta el campo requerido: $field"], 400);
+                    }
+                }
+
+                // Verifica si el usuario ya existe
                 if (!User::where('email', $external['email'])->exists()) {
                     $user = User::create([
                         'name' => $external['name'],
@@ -390,7 +404,7 @@ public function webhook(Request $request)
                         'uniqd' => uniqid(),
                         'store_name' => $external['store_name'],
                         'slug' => $external['slug'],
-                        'password' => $external['password'],
+                        'password' => bcrypt($external['password']), // ¡Importante! Encriptar la contraseña
                         'plan_id' => $external['plan_id'],
                         'mercadopago_subscription_id' => $subscription->id
                     ]);
@@ -406,13 +420,17 @@ public function webhook(Request $request)
             return response()->json(['status' => 'ok'], 200);
 
         } catch (\Exception $e) {
-            Log::error('Error procesando webhook de MercadoPago', ['error' => $e->getMessage()]);
+            Log::error('Error procesando webhook de MercadoPago', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json(['error' => 'Error procesando el webhook'], 500);
         }
     }
 
     return response()->json(['message' => 'Tipo de evento no manejado'], 200);
 }
+
 
 
 
