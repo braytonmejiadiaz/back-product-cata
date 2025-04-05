@@ -81,7 +81,7 @@ class AuthController extends Controller
                 "frequency_type" => "months",
                 "transaction_amount" => (float) $plan->price,
                 "currency_id" => "COP",
-                "start_date" => now()->addDay(10)->toISOString(),
+                // "start_date" => now()->addDay(10)->toISOString(),
                 "end_date" => now()->addYears(1)->toISOString(),
             ]
         ];
@@ -482,7 +482,8 @@ private function generateUniqueSlug($storeName)
             'mercadopago_subscription_id' => $subscription->id,
             'email_verified_at' => now(),
         ]);
-
+        Mail::to($user->email)->send(new VerifiedMail($user));
+        \Log::info('Correo enviado a usuario creado', ['email' => $user->email]);
         // Eliminar archivo temporal
         Storage::delete($path);
 
