@@ -362,21 +362,29 @@ private function generateUniqueSlug($storeName)
     ]);
 }
 
+
 public function webhook(Request $request)
 {
     Log::info('Webhook recibido', $request->all());
 
     $type = $request->get('type');
 
-    if ($type === 'preapproval') {
+    if (str_contains($type, 'preapproval')) {
+        Log::info('Tipo de evento reconocido como preapproval o subscription_preapproval');
+
         MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
         $client = new PreApprovalClient();
 
         try {
             $preapprovalId = $request->get('data')['id'];
+            Log::info('ID de preapproval recibido', ['preapproval_id' => $preapprovalId]);
+
             $subscription = $client->get($preapprovalId);
+            Log::info('Datos de suscripción obtenidos desde MercadoPago', ['status' => $subscription->status]);
 
             if ($subscription->status === 'authorized') {
+                Log::info('Suscripción autorizada, procesando external_reference');
+
                 $external = json_decode($subscription->external_reference, true);
 
                 if (!is_array($external)) {
@@ -384,7 +392,6 @@ public function webhook(Request $request)
                     return response()->json(['error' => 'external_reference inválido'], 400);
                 }
 
-                // Validación básica de datos requeridos
                 $requiredFields = ['email', 'name', 'surname', 'phone', 'store_name', 'slug', 'password', 'plan_id'];
                 foreach ($requiredFields as $field) {
                     if (empty($external[$field])) {
@@ -393,7 +400,6 @@ public function webhook(Request $request)
                     }
                 }
 
-                // Verifica si el usuario ya existe
                 if (!User::where('email', $external['email'])->exists()) {
                     $user = User::create([
                         'name' => $external['name'],
@@ -404,23 +410,23 @@ public function webhook(Request $request)
                         'uniqd' => uniqid(),
                         'store_name' => $external['store_name'],
                         'slug' => $external['slug'],
-                        'password' => bcrypt($external['password']), // ¡Importante! Encriptar la contraseña
+                        'password' => bcrypt($external['password']),
                         'plan_id' => $external['plan_id'],
                         'mercadopago_subscription_id' => $subscription->id
                     ]);
 
-                    Log::info('Usuario creado exitosamente después de confirmación de suscripción', ['user_id' => $user->id]);
+                    Log::info('✅ Usuario creado exitosamente después de suscripción', ['user_id' => $user->id]);
                 } else {
-                    Log::info('El usuario ya existía', ['email' => $external['email']]);
+                    Log::info('ℹ️ El usuario ya existía', ['email' => $external['email']]);
                 }
             } else {
-                Log::warning('Suscripción no autorizada aún', ['status' => $subscription->status]);
+                Log::warning('Suscripción recibida, pero no está autorizada aún', ['status' => $subscription->status]);
             }
 
             return response()->json(['status' => 'ok'], 200);
 
         } catch (\Exception $e) {
-            Log::error('Error procesando webhook de MercadoPago', [
+            Log::error('❌ Error procesando webhook de MercadoPago', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
@@ -428,6 +434,7 @@ public function webhook(Request $request)
         }
     }
 
+    Log::info('🔁 Evento ignorado por tipo no manejado', ['type' => $type]);
     return response()->json(['message' => 'Tipo de evento no manejado'], 200);
 }
 
