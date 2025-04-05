@@ -49,6 +49,7 @@ class User extends Authenticatable implements JWTSubject
         "vision",
         "plan_id",
         "button_radio",
+        "mercadopago_subscription_id"
     ];
 
     /**

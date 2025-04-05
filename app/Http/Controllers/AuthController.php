@@ -394,7 +394,6 @@ private function generateUniqueSlug($storeName)
 
 
 
-
     public function webhook(Request $request)
 {
     MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
@@ -402,30 +401,18 @@ private function generateUniqueSlug($storeName)
     $data = $request->all();
     \Log::info('Webhook recibido:', $data);
 
-    // Manejar diferentes formatos de webhook de MercadoPago
+    // Manejar diferentes formatos de webhook
     $eventType = $data['type'] ?? ($data['topic'] ?? null);
 
-    // Eventos que nos interesan (suscription_preapproval o payment para suscripciones)
+    // Eventos que nos interesan
     if (!in_array($eventType, ['subscription_preapproval', 'payment', 'preapproval'])) {
         \Log::info('Evento no manejado:', ['type' => $eventType]);
         return response()->json(['message' => 'Evento no manejado'], 200);
     }
 
     try {
-        // Obtener el ID de la suscripción según el tipo de evento
-        $subscriptionId = null;
-
-        if ($eventType === 'subscription_preapproval' || $eventType === 'preapproval') {
-            $subscriptionId = $data['data']['id'] ?? null;
-        } elseif ($eventType === 'payment') {
-            // Para eventos de payment, necesitamos obtener la suscripción asociada
-            $paymentId = $data['data']['id'] ?? $data['resource'] ?? null;
-            if ($paymentId) {
-                $paymentClient = new PaymentClient();
-                $payment = $paymentClient->get($paymentId);
-                $subscriptionId = $payment->metadata->subscription_id ?? null;
-            }
-        }
+        // Obtener el ID de la suscripción
+        $subscriptionId = $data['data']['id'] ?? null;
 
         if (!$subscriptionId) {
             \Log::error('No se pudo obtener el ID de suscripción');
@@ -437,13 +424,13 @@ private function generateUniqueSlug($storeName)
 
         \Log::info('Estado de suscripción:', ['status' => $subscription->status, 'id' => $subscription->id]);
 
-        // Verificar si la suscripción está autorizada o activa
-        if (!in_array($subscription->status, ['authorized', 'active', 'pending'])) {
-            \Log::info("Suscripción no lista: {$subscription->id} - Estado: {$subscription->status}");
+        // Solo procesar si la suscripción está autorizada
+        if ($subscription->status !== 'authorized') {
+            \Log::info("Suscripción no autorizada aún: {$subscription->id} - Estado: {$subscription->status}");
             return response()->json(['message' => 'Suscripción aún no activa'], 200);
         }
 
-        // Buscar si ya existe un usuario con esa suscripción
+        // Verificar si el usuario ya existe
         if (User::where('mercadopago_subscription_id', $subscription->id)->exists()) {
             \Log::info("Usuario ya registrado para la suscripción: {$subscription->id}");
             return response()->json(['message' => 'Usuario ya registrado'], 200);
@@ -481,6 +468,7 @@ private function generateUniqueSlug($storeName)
             $userData['password'] = Hash::make($userData['password']);
         }
 
+        // Crear el usuario
         $user = User::create([
             'name' => $userData['name'],
             'surname' => $userData['surname'],
