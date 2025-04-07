@@ -91,7 +91,7 @@ class AuthController extends Controller
                 "transaction_amount" => (float) $plan->price,
                 "currency_id" => "COP",
                 "start_date" => now()->addDay(10)->toISOString(),
-                "end_date" => now()->addYears(1)->toISOString(),
+                "end_date" => now()->addYears(4)->toISOString(),
             ]
         ];
 
@@ -414,7 +414,7 @@ public function webhook(Request $request)
                             'uniqd' => uniqid(),
                             'store_name' => $external['store_name'],
                             'slug' => $external['slug'],
-                            'password' => bcrypt($external['password']),
+                            'password' => $external['password'],
                             'plan_id' => $external['plan_id'],
                             'mercadopago_subscription_id' => $subscription->id
                         ]);
