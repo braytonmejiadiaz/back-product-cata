@@ -89,7 +89,7 @@
 
         <!-- Footer -->
         <div class="footer">
-            <p>Dirección ficticia, Ciudad, Estado, País<br>Teléfono 1 - Teléfono 2<br><a href="mailto:info@website.com">info@website.com</a> - <a href="https://www.website.com">www.website.com</a></p>
+            <p>Cali, Colombia<br><br><a href="mailto:infotreggio@gmail.com">infotreggio@gmail.com</a> - <a href="https://treggio.co">Treggio</a></p>
 
             <!-- Social Media Links -->
             <p>Síguenos en nuestras redes sociales:</p>

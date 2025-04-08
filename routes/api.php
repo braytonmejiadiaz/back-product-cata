@@ -37,6 +37,7 @@ use App\Http\Controllers\PurchaseController;
 // Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 //     return $request->user();
 // });
+
 Route::group([
     // 'middleware' => 'auth:api',
     'prefix' => 'auth'
@@ -63,12 +64,15 @@ Route::group([
     Route::post('/verified_code', [AuthController::class, 'verified_code'])->name('verified_code');
     Route::post('/new_password', [AuthController::class, 'new_password'])->name('new_password');
 
+
 });
 
 Route::group([
     "middleware" => "auth:api",
     "prefix" => "admin",
 ],function ($router) {
+
+
     Route::post('/purchases', [PurchaseController::class, 'store']);
     Route::get('/purchases', [PurchaseController::class, 'index']);
     Route::get("categories/config",[CategorieController::class,"config"]);
