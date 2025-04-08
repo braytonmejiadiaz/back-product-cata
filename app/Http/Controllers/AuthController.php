@@ -91,7 +91,7 @@ class AuthController extends Controller
                 "transaction_amount" => (float) $plan->price,
                 "currency_id" => "COP",
                 "start_date" => now()->addDay(10)->toISOString(),
-                "end_date" => now()->addYears(4)->toISOString(),
+                "end_date" => now()->addYears(3)->toISOString(),
             ]
         ];
 
@@ -103,29 +103,13 @@ class AuthController extends Controller
             'subscription_id' => $subscription->id
         ], 200);
 
-    }   catch (MPApiException $e) {
-        $statusCode = 500;
-        $responseData = [];
-
-        if (method_exists($e, 'getApiResponse')) {
-            $apiResponse = $e->getApiResponse();
-            $statusCode = $apiResponse['status'] ?? 500;
-            $responseData = $apiResponse;
-        }
-
+    }  catch (MPApiException $e) {
         Log::error('Error en MercadoPago', [
             'message' => $e->getMessage(),
-            'status' => $statusCode,
-            'response' => $responseData
+            'status' => $e->getHttpStatusCode()
         ]);
-
-        return response()->json([
-            'error' => 'Error en el procesamiento de pago',
-            'message' => $e->getMessage(),
-            'details' => $responseData
-        ], $statusCode);
+        return response()->json(['error' => 'Error en el procesamiento de pago: ' . $e->getMessage()], 500);
     }
-
 }
 
 
