@@ -103,13 +103,29 @@ class AuthController extends Controller
             'subscription_id' => $subscription->id
         ], 200);
 
-    } catch (MPApiException $e) {
+    }   catch (MPApiException $e) {
+        $statusCode = 500;
+        $responseData = [];
+
+        if (method_exists($e, 'getApiResponse')) {
+            $apiResponse = $e->getApiResponse();
+            $statusCode = $apiResponse['status'] ?? 500;
+            $responseData = $apiResponse;
+        }
+
         Log::error('Error en MercadoPago', [
             'message' => $e->getMessage(),
-            'status' => $e->getHttpStatusCode()
+            'status' => $statusCode,
+            'response' => $responseData
         ]);
-        return response()->json(['error' => 'Error en el procesamiento de pago: ' . $e->getMessage()], 500);
+
+        return response()->json([
+            'error' => 'Error en el procesamiento de pago',
+            'message' => $e->getMessage(),
+            'details' => $responseData
+        ], $statusCode);
     }
+
 }
 
 
