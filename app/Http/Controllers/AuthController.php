@@ -544,16 +544,21 @@ public function webhook(Request $request)
         ]);
 
         if ($validator->fails()) {
-            return response()->json($validator->errors()->toJson(), 400);
+            return response()->json($validator->errors(), 400);
         }
 
         $user = User::find($request->user_id);
         $plan = Plan::find($request->plan_id);
 
-        MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
+        // Solo esta función maneja TODO el proceso:
+        if ($plan->is_free) {
+            // Actualización directa si es gratis
+            $user->update(['plan_id' => $plan->id]);
+            return response()->json(['message' => 'Plan actualizado']);
+        } else {
+            // Flujo MercadoPago para planes de pago
+            MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
 
-        try {
-            $preapprovalClient = new PreApprovalClient();
             $preapprovalData = [
                 "back_url" => env('FRONTEND_URL') . "/payment-result",
                 "payer_email" => $user->email,
@@ -562,31 +567,19 @@ public function webhook(Request $request)
                     'plan_id' => $plan->id,
                     'action' => 'update'
                 ]),
-                "reason" => "Actualización a plan " . $plan->name,
                 "auto_recurring" => [
                     "frequency" => 1,
                     "frequency_type" => "months",
                     "transaction_amount" => (float) $plan->price,
-                    "currency_id" => "COP",
-                    "start_date" => now()->addDay(10)->toISOString(),
-                    "end_date" => now()->addYears(3)->toISOString(),
+                    "currency_id" => "COP"
                 ]
             ];
 
-            $subscription = $preapprovalClient->create($preapprovalData);
+            $subscription = (new PreApprovalClient())->create($preapprovalData);
 
             return response()->json([
-                'message' => 'Por favor completa el pago para actualizar tu plan',
-                'payment_url' => $subscription->init_point,
-                'subscription_id' => $subscription->id
-            ], 200);
-
-        } catch (MPApiException $e) {
-            Log::error('Error en MercadoPago', [
-                'message' => $e->getMessage(),
-                'status' => $e->getHttpStatusCode()
+                'payment_url' => $subscription->init_point
             ]);
-            return response()->json(['error' => 'Error en el procesamiento de pago'], 500);
         }
     }
 
