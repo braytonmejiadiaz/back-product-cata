@@ -113,7 +113,7 @@ class AuthController extends Controller
             ];
 
             $preapprovalData = [
-                "back_url" => rtrim(env('FRONTEND_URL'), '/') . "/payment-result?source=register",
+                "back_url" => "https://app.treggio.co/ingresar",
                 "payer_email" => request()->email,
                 "external_reference" => json_encode($externalReference),
                 "reason" => "Suscripción al plan " . $plan->name,
@@ -575,7 +575,7 @@ public function webhook(Request $request)
         MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
 
         $preapprovalData = [
-            "back_url" => rtrim(env('FRONTEND_URL'), '/') . "/ingresar",
+            "back_url" => "https://app.treggio.co/ingresar",
             "payer_email" => $user->email,
             "external_reference" => json_encode([
                 'user_id' => $user->id,
