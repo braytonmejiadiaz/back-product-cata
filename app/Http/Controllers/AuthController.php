@@ -44,101 +44,100 @@ class AuthController extends Controller
      */
 
      public function register()
-{
-    $validator = Validator::make(request()->all(), [
-        'name' => 'required',
-        'surname' => 'required',
-        'phone' => 'required',
-        'email' => 'required|email|unique:users',
-        'password' => 'required',
-        'store_name' => 'required',
-        'plan_id' => 'required|exists:plans,id',
-        'country_code' => 'required|string',
-    ]);
+     {
+         $validator = Validator::make(request()->all(), [
+             'name' => 'required',
+             'surname' => 'required',
+             'phone' => 'required',
+             'email' => 'required|email|unique:users',
+             'password' => 'required',
+             'store_name' => 'required',
+             'plan_id' => 'required|exists:plans,id',
+             'country_code' => 'required|string',
+         ]);
 
+         if ($validator->fails()) {
+             return response()->json($validator->errors()->toJson(), 400);
+         }
 
-    if ($validator->fails()) {
-        return response()->json($validator->errors()->toJson(), 400);
-    }
+         $country = collect($this->countries)->firstWhere('dial_code', request()->country_code);
+         if (!$country) {
+             return response()->json(['error' => 'Código de país no válido'], 400);
+         }
 
-    $country = collect($this->countries)->firstWhere('dial_code', request()->country_code);
-    if (!$country) {
-        return response()->json(['error' => 'Código de país no válido'], 400);
-    }
+         $plan = Plan::find(request()->plan_id);
 
-    $plan = Plan::find(request()->plan_id);
+         // Si es plan gratis, crear usuario directamente
+         if ($plan->is_free) {
+             $user = User::create([
+                 'name' => request()->name,
+                 'surname' => request()->surname,
+                 'phone' => request()->country_code . request()->phone,
+                 'type_user' => 1,
+                 'email' => request()->email,
+                 'uniqd' => uniqid(),
+                 'store_name' => request()->store_name,
+                 'slug' => $this->generateUniqueSlug(request()->store_name),
+                 'password' => bcrypt(request()->password),
+                 'plan_id' => $plan->id,
+                 'email_verified_at' => now()
+             ]);
 
-        // Si es plan gratis, crear usuario directamente
-        if ($plan->is_free) {
-            $user = User::create([
-                'name' => request()->name,
-                'surname' => request()->surname,
-                'phone' => request()->country_code . request()->phone,
-                'type_user' => 1,
-                'email' => request()->email,
-                'uniqd' => uniqid(),
-                'store_name' => request()->store_name,
-                'slug' => $this->generateUniqueSlug(request()->store_name),
-                'password' => bcrypt(request()->password),
-                'plan_id' => $plan->id,
-                'email_verified_at' => now()
-            ]);
+             $token = auth('api')->login($user);
 
-            $token = auth('api')->login($user);
+             return response()->json([
+                 'message' => 'Registro exitoso',
+                 'access_token' => $token,
+                 'token_type' => 'bearer',
+                 'expires_in' => auth('api')->factory()->getTTL() * 60,
+                 'user' => $user
+             ], 200);
+         }
 
-            return response()->json([
-                'message' => 'Registro exitoso',
-                'access_token' => $token,
-                'token_type' => 'bearer',
-                'expires_in' => auth('api')->factory()->getTTL() * 60,
-                'user' => $user
-            ], 200);
-        }
+         MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
 
+         try {
+             $preapprovalClient = new PreApprovalClient();
+             $preapprovalData = [
+                 "back_url" => env('FRONTEND_URL') . "/ingresar",
+                 "payer_email" => request()->email,
+                 "external_reference" => json_encode([
+                     'email' => request()->email,
+                     'name' => request()->name,
+                     'surname' => request()->surname,
+                     'phone' => request()->country_code . request()->phone,
+                     'store_name' => request()->store_name,
+                     'password' => bcrypt(request()->password),
+                     'plan_id' => $plan->id,
+                     'slug' => $this->generateUniqueSlug(request()->store_name),
+                     'action' => 'register'
+                 ]),
+                 "reason" => "Suscripción al plan " . $plan->name,
+                 "auto_recurring" => [
+                     "frequency" => 1,
+                     "frequency_type" => "months",
+                     "transaction_amount" => (float) $plan->price,
+                     "currency_id" => "COP",
+                     "start_date" => now()->addDay(1)->toISOString(),
+                     "end_date" => now()->addYears(3)->toISOString(),
+                 ]
+             ];
 
-    MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
+             $subscription = $preapprovalClient->create($preapprovalData);
 
-    try {
-        $preapprovalClient = new PreApprovalClient();
-        $preapprovalData = [
-            "back_url" => "https://app.treggio.co/ingresar",
-            "payer_email" => request()->email,
-            "external_reference" => json_encode([
-                'email' => request()->email,
-                'name' => request()->name,
-                'surname' => request()->surname,
-                'phone' => request()->country_code . request()->phone,
-                'store_name' => request()->store_name,
-                'password' => bcrypt(request()->password),
-                'plan_id' => $plan->id,
-                'slug' => $this->generateUniqueSlug(request()->store_name),
-            ]),
-            "reason" => "Suscripción al plan " . $plan->name,
-            "auto_recurring" => [
-                "frequency" => 1,
-                "frequency_type" => "months",
-                "transaction_amount" => (float) $plan->price,
-                "currency_id" => "COP",
-                "start_date" => now()->addDay(1)->toISOString(),
-                "end_date" => now()->addYears(3)->toISOString(),
-            ]
-        ];
+             return response()->json([
+                 'message' => 'Por favor completa el pago para activar tu cuenta',
+                 'payment_url' => $subscription->init_point,
+                 'subscription_id' => $subscription->id
+             ], 200);
 
-        $subscription = $preapprovalClient->create($preapprovalData);
-
-        return response()->json([
-            'message' => 'Por favor completa el pago para activar tu cuenta',
-            'payment_url' => $subscription->init_point,
-            'subscription_id' => $subscription->id
-        ], 200);
-
-    }  catch (MPApiException $e) {
-        Log::error('Error en MercadoPago', [
-            'message' => $e->getMessage(),
-            'status' => $e->getHttpStatusCode()
-        ]);
-        return response()->json(['error' => 'Error en el procesamiento de pago: ' . $e->getMessage()], 500);
-    }
+         } catch (MPApiException $e) {
+             Log::error('Error en MercadoPago', [
+                 'message' => $e->getMessage(),
+                 'status' => $e->getHttpStatusCode()
+             ]);
+             return response()->json(['error' => 'Error en el procesamiento de pago: ' . $e->getMessage()], 500);
+         }
 }
 
 
@@ -394,47 +393,83 @@ private function generateUniqueSlug($storeName)
 
 
 public function webhook(Request $request)
-{
-    Log::info('Webhook recibido', $request->all());
+    {
+        Log::info('Webhook recibido', $request->all());
 
-    $type = $request->get('type');
+        $type = $request->get('type');
+        if (!$type && $request->has('topic')) {
+            $type = $request->get('topic');
+        }
 
-    // Compatibilidad adicional
-    if (!$type && $request->has('topic')) {
-        $type = $request->get('topic');
-    }
+        if (in_array($type, ['preapproval', 'subscription_preapproval'])) {
+            MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
+            $client = new PreApprovalClient();
 
-    if (in_array($type, ['preapproval', 'subscription_preapproval'])) {
-        Log::info('Tipo de evento reconocido como preapproval o subscription_preapproval');
+            try {
+                $preapprovalId = $request->get('data')['id'] ?? $request->get('data_id');
+                Log::info('ID de preapproval recibido', ['preapproval_id' => $preapprovalId]);
 
-        MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
-        $client = new PreApprovalClient();
+                $subscription = $client->get($preapprovalId);
+                Log::info('Datos de suscripción obtenidos desde MercadoPago', ['status' => $subscription->status]);
 
-        try {
-            $preapprovalId = $request->get('data')['id'] ?? $request->get('data_id');
-            Log::info('ID de preapproval recibido', ['preapproval_id' => $preapprovalId]);
+                $external = json_decode($subscription->external_reference, true);
+                if (!is_array($external)) {
+                    Log::error('external_reference no es un array válido', ['external_reference' => $subscription->external_reference]);
+                    return response()->json(['error' => 'external_reference inválido'], 400);
+                }
 
-            $subscription = $client->get($preapprovalId);
-            Log::info('Datos de suscripción obtenidos desde MercadoPago', ['status' => $subscription->status]);
+                // Manejar ambos casos: registro nuevo y actualización de plan
+                if (isset($external['action'])) {
+                    switch ($external['action']) {
+                        case 'update':
+                            // ACTUALIZACIÓN DE PLAN EXISTENTE
+                            $user = User::find($external['user_id']);
+                            if ($user && $subscription->status === 'authorized') {
+                                // Cancelar suscripción anterior si existe
+                                if ($user->mercadopago_subscription_id) {
+                                    try {
+                                        $client->cancel($user->mercadopago_subscription_id);
+                                    } catch (\Exception $e) {
+                                        Log::error('Error cancelando suscripción anterior', ['error' => $e->getMessage()]);
+                                    }
+                                }
 
-            switch ($subscription->status) {
-                case 'authorized':
-                    $external = json_decode($subscription->external_reference, true);
+                                $user->update([
+                                    'plan_id' => $external['plan_id'],
+                                    'mercadopago_subscription_id' => $subscription->id
+                                ]);
+                                Log::info('Plan actualizado exitosamente', ['user_id' => $user->id]);
+                            }
+                            break;
 
-                    if (!is_array($external)) {
-                        Log::error('external_reference no es un array válido', ['external_reference' => $subscription->external_reference]);
-                        return response()->json(['error' => 'external_reference inválido'], 400);
+                        case 'register':
+                            // REGISTRO DE NUEVO USUARIO
+                            if ($subscription->status === 'authorized' && !User::where('email', $external['email'])->exists()) {
+                                $user = User::create([
+                                    'name' => $external['name'],
+                                    'surname' => $external['surname'],
+                                    'phone' => $external['phone'],
+                                    'type_user' => 1,
+                                    'email' => $external['email'],
+                                    'uniqd' => uniqid(),
+                                    'store_name' => $external['store_name'],
+                                    'slug' => $external['slug'],
+                                    'password' => $external['password'],
+                                    'plan_id' => $external['plan_id'],
+                                    'mercadopago_subscription_id' => $subscription->id,
+                                    'email_verified_at' => now()
+                                ]);
+                                Log::info('✅ Usuario creado exitosamente después de suscripción', ['user_id' => $user->id]);
+                            }
+                            break;
+
+                        default:
+                            Log::warning('Acción desconocida en external_reference', ['action' => $external['action']]);
+                            break;
                     }
-
-                    $requiredFields = ['email', 'name', 'surname', 'phone', 'store_name', 'slug', 'password', 'plan_id'];
-                    foreach ($requiredFields as $field) {
-                        if (empty($external[$field])) {
-                            Log::error("Falta el campo requerido: $field", $external);
-                            return response()->json(['error' => "Falta el campo requerido: $field"], 400);
-                        }
-                    }
-
-                    if (!User::where('email', $external['email'])->exists()) {
+                } else {
+                    // Compatibilidad con versiones anteriores (solo registro)
+                    if ($subscription->status === 'authorized' && !User::where('email', $external['email'])->exists()) {
                         $user = User::create([
                             'name' => $external['name'],
                             'surname' => $external['surname'],
@@ -446,44 +481,27 @@ public function webhook(Request $request)
                             'slug' => $external['slug'],
                             'password' => $external['password'],
                             'plan_id' => $external['plan_id'],
-                            'mercadopago_subscription_id' => $subscription->id
+                            'mercadopago_subscription_id' => $subscription->id,
+                            'email_verified_at' => now()
                         ]);
-
-                        Log::info('✅ Usuario creado exitosamente después de suscripción', ['user_id' => $user->id]);
-                    } else {
-                        Log::info('ℹ️ El usuario ya existía', ['email' => $external['email']]);
+                        Log::info('✅ Usuario creado exitosamente (compatibilidad)', ['user_id' => $user->id]);
                     }
-                    break;
+                }
 
-                case 'pending':
-                    Log::warning('⏳ Suscripción recibida, pero no está autorizada aún', ['status' => $subscription->status]);
-                    break;
+                return response()->json(['status' => 'ok'], 200);
 
-                case 'cancelled':
-                    Log::warning('❌ Suscripción cancelada por el usuario o rechazada por el banco', ['status' => $subscription->status]);
-                    break;
-
-                default:
-                    Log::warning('📛 Estado desconocido de suscripción', ['status' => $subscription->status]);
-                    break;
+            } catch (\Exception $e) {
+                Log::error('Error procesando webhook de MercadoPago', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
+                return response()->json(['error' => 'Error procesando el webhook'], 500);
             }
-
-            return response()->json(['status' => 'ok'], 200);
-
-        } catch (\Exception $e) {
-            Log::error('🔥 Error procesando webhook de MercadoPago', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            return response()->json(['error' => 'Error procesando el webhook'], 500);
         }
+
+        Log::info('Evento ignorado por tipo no manejado', ['type' => $type]);
+        return response()->json(['message' => 'Tipo de evento no manejado'], 200);
     }
-
-    Log::info('🔁 Evento ignorado por tipo no manejado', ['type' => $type]);
-    return response()->json(['message' => 'Tipo de evento no manejado'], 200);
-}
-
-
 
 
 
@@ -519,55 +537,57 @@ public function webhook(Request $request)
 
 
     public function updatePlanPayment(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'user_id' => 'required|exists:users,id',
-        'plan_id' => 'required|exists:plans,id'
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json($validator->errors()->toJson(), 400);
-    }
-
-    $user = User::find($request->user_id);
-    $plan = Plan::find($request->plan_id);
-
-    MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
-
-    try {
-        $preapprovalClient = new PreApprovalClient();
-        $preapprovalData = [
-            "back_url" => env('FRONTEND_URL') . "/payment-result",
-            "payer_email" => $user->email,
-            "external_reference" => json_encode([
-                'user_id' => $user->id,
-                'plan_id' => $plan->id,
-                'action' => 'update'
-            ]),
-            "reason" => "Actualización a plan " . $plan->name,
-            "auto_recurring" => [
-                "frequency" => 1,
-                "frequency_type" => "months",
-                "transaction_amount" => (float) $plan->price,
-                "currency_id" => "COP",
-                "start_date" => now()->addDay(10)->toISOString(),
-                "end_date" => now()->addYears(3)->toISOString(),
-            ]
-        ];
-        $subscription = $preapprovalClient->create($preapprovalData);
-        return response()->json([
-            'message' => 'Por favor completa el pago para actualizar tu plan',
-            'payment_url' => $subscription->init_point,
-            'subscription_id' => $subscription->id
-        ], 200);
-
-    } catch (MPApiException $e) {
-        Log::error('Error en MercadoPago', [
-            'message' => $e->getMessage(),
-            'status' => $e->getHttpStatusCode()
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|exists:users,id',
+            'plan_id' => 'required|exists:plans,id'
         ]);
-        return response()->json(['error' => 'Error en el procesamiento de pago'], 500);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors()->toJson(), 400);
+        }
+
+        $user = User::find($request->user_id);
+        $plan = Plan::find($request->plan_id);
+
+        MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
+
+        try {
+            $preapprovalClient = new PreApprovalClient();
+            $preapprovalData = [
+                "back_url" => env('FRONTEND_URL') . "/payment-result",
+                "payer_email" => $user->email,
+                "external_reference" => json_encode([
+                    'user_id' => $user->id,
+                    'plan_id' => $plan->id,
+                    'action' => 'update'
+                ]),
+                "reason" => "Actualización a plan " . $plan->name,
+                "auto_recurring" => [
+                    "frequency" => 1,
+                    "frequency_type" => "months",
+                    "transaction_amount" => (float) $plan->price,
+                    "currency_id" => "COP",
+                    "start_date" => now()->addDay(10)->toISOString(),
+                    "end_date" => now()->addYears(3)->toISOString(),
+                ]
+            ];
+
+            $subscription = $preapprovalClient->create($preapprovalData);
+
+            return response()->json([
+                'message' => 'Por favor completa el pago para actualizar tu plan',
+                'payment_url' => $subscription->init_point,
+                'subscription_id' => $subscription->id
+            ], 200);
+
+        } catch (MPApiException $e) {
+            Log::error('Error en MercadoPago', [
+                'message' => $e->getMessage(),
+                'status' => $e->getHttpStatusCode()
+            ]);
+            return response()->json(['error' => 'Error en el procesamiento de pago'], 500);
+        }
     }
-}
 
 }
