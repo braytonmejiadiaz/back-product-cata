@@ -42,111 +42,112 @@ class AuthController extends Controller
      *
      * @return \Illuminate\Http\JsonResponse
      */
+    public function register()
+    {
+        $validator = Validator::make(request()->all(), [
+            'name' => 'required',
+            'surname' => 'required',
+            'phone' => 'required',
+            'email' => 'required|email|unique:users',
+            'password' => 'required',
+            'store_name' => 'required',
+            'plan_id' => 'required|exists:plans,id',
+            'country_code' => 'required|string',
+        ]);
 
-     public function register()
-     {
-         $validator = Validator::make(request()->all(), [
-             'name' => 'required',
-             'surname' => 'required',
-             'phone' => 'required',
-             'email' => 'required|email|unique:users',
-             'password' => 'required',
-             'store_name' => 'required',
-             'plan_id' => 'required|exists:plans,id',
-             'country_code' => 'required|string',
-         ]);
+        if ($validator->fails()) {
+            return response()->json($validator->errors()->toJson(), 400);
+        }
 
-         if ($validator->fails()) {
-             return response()->json($validator->errors()->toJson(), 400);
-         }
+        $country = collect($this->countries)->firstWhere('dial_code', request()->country_code);
+        if (!$country) {
+            return response()->json(['error' => 'Código de país no válido'], 400);
+        }
 
-         $country = collect($this->countries)->firstWhere('dial_code', request()->country_code);
-         if (!$country) {
-             return response()->json(['error' => 'Código de país no válido'], 400);
-         }
+        $plan = Plan::find(request()->plan_id);
 
-         $plan = Plan::find(request()->plan_id);
+        // Si es plan gratis, crear usuario directamente
+        if ($plan->is_free) {
+            $user = User::create([
+                'name' => request()->name,
+                'surname' => request()->surname,
+                'phone' => request()->country_code . request()->phone,
+                'type_user' => 1,
+                'email' => request()->email,
+                'uniqd' => uniqid(),
+                'store_name' => request()->store_name,
+                'slug' => $this->generateUniqueSlug(request()->store_name),
+                'password' => bcrypt(request()->password),
+                'plan_id' => $plan->id,
+                'email_verified_at' => now()
+            ]);
 
-         // Si es plan gratis, crear usuario directamente
-         if ($plan->is_free) {
-             $user = User::create([
-                 'name' => request()->name,
-                 'surname' => request()->surname,
-                 'phone' => request()->country_code . request()->phone,
-                 'type_user' => 1,
-                 'email' => request()->email,
-                 'uniqd' => uniqid(),
-                 'store_name' => request()->store_name,
-                 'slug' => $this->generateUniqueSlug(request()->store_name),
-                 'password' => bcrypt(request()->password),
-                 'plan_id' => $plan->id,
-                 'email_verified_at' => now()
-             ]);
+            $token = auth('api')->login($user);
 
-             $token = auth('api')->login($user);
+            return response()->json([
+                'message' => 'Registro exitoso',
+                'access_token' => $token,
+                'token_type' => 'bearer',
+                'expires_in' => auth('api')->factory()->getTTL() * 60,
+                'user' => $user
+            ], 200);
+        }
 
-             return response()->json([
-                 'message' => 'Registro exitoso',
-                 'access_token' => $token,
-                 'token_type' => 'bearer',
-                 'expires_in' => auth('api')->factory()->getTTL() * 60,
-                 'user' => $user
-             ], 200);
-         }
+        // Configuración de MercadoPago
+        MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
 
-         MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
+        try {
+            $preapprovalClient = new PreApprovalClient();
+            $preapprovalData = [
+                "back_url" => rtrim(env('FRONTEND_URL'), '/') . "/payment-result?source=register",
+                "payer_email" => request()->email,
+                "external_reference" => json_encode([
+                    'email' => request()->email,
+                    'name' => request()->name,
+                    'surname' => request()->surname,
+                    'phone' => request()->country_code . request()->phone,
+                    'store_name' => request()->store_name,
+                    'password' => bcrypt(request()->password),
+                    'plan_id' => $plan->id,
+                    'slug' => $this->generateUniqueSlug(request()->store_name),
+                    'action' => 'register'
+                ]),
+                "reason" => "Suscripción al plan " . $plan->name,
+                "auto_recurring" => [
+                    "frequency" => 1,
+                    "frequency_type" => "months",
+                    "transaction_amount" => (float) $plan->price,
+                    "currency_id" => "COP",
+                    "start_date" => now()->addDay(1)->toISOString(),
+                    "end_date" => now()->addYears(3)->toISOString(),
+                ]
+            ];
 
-         try {
-             $preapprovalClient = new PreApprovalClient();
-             $preapprovalData = [
-                 "back_url" => rtrim(env('FRONTEND_URL'), '/') . "/ingresar",
-                 "payer_email" => request()->email,
-                 "external_reference" => json_encode([
-                     'email' => request()->email,
-                     'name' => request()->name,
-                     'surname' => request()->surname,
-                     'phone' => request()->country_code . request()->phone,
-                     'store_name' => request()->store_name,
-                     'password' => bcrypt(request()->password),
-                     'plan_id' => $plan->id,
-                     'slug' => $this->generateUniqueSlug(request()->store_name),
-                     'action' => 'register'
-                 ]),
-                 "reason" => "Suscripción al plan " . $plan->name,
-                 "auto_recurring" => [
-                     "frequency" => 1,
-                     "frequency_type" => "months",
-                     "transaction_amount" => (float) $plan->price,
-                     "currency_id" => "COP",
-                     "start_date" => now()->addDay(1)->toISOString(),
-                     "end_date" => now()->addYears(3)->toISOString(),
-                 ]
-             ];
+            $subscription = $preapprovalClient->create($preapprovalData);
 
-             $subscription = $preapprovalClient->create($preapprovalData);
+            return response()->json([
+                'success' => true,
+                'message' => 'Por favor completa el pago para activar tu cuenta',
+                'payment_url' => $subscription->init_point ?? $subscription->sandbox_init_point,
+                'subscription_id' => $subscription->id,
+                'redirect_type' => 'direct'
+            ], 200);
 
-             return response()->json([
-                 'success' => true,
-                 'message' => 'Por favor completa el pago para activar tu cuenta',
-                 'payment_url' => $subscription->init_point ?? $subscription->sandbox_init_point,
-                 'subscription_id' => $subscription->id,
-                 'redirect_type' => 'direct'
-             ], 200);
+        } catch (\Exception $e) {
+            // Manejo genérico de errores que funciona para todas las excepciones
+            Log::error('Error en registro MercadoPago', [
+                'message' => $e->getMessage(),
+                'exception' => get_class($e),
+                'trace' => $e->getTraceAsString()
+            ]);
 
-         } catch (MPApiException $e) {
-             Log::error('Error en MercadoPago', [
-                 'message' => $e->getMessage(),
-                 'status' => $e->getHttpStatusCode(),
-                 'response' => $e->getApiResponse()
-             ]);
-             return response()->json([
-                 'success' => false,
-                 'error' => 'Error en el procesamiento de pago',
-                 'message' => $e->getMessage(),
-                 'mp_details' => $e->getApiResponse()
-             ], 500);
-         }
-     }
+            return response()->json([
+                'success' => false,
+                'error' => 'Error en el procesamiento de pago',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
 
 /**
  * Generate a unique slug for store
