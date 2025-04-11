@@ -535,52 +535,78 @@ public function webhook(Request $request)
 
 
 
-
     public function updatePlanPayment(Request $request)
     {
+        // Obtiene el usuario autenticado desde el token JWT
+        $user = auth()->user();
+
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
-            'plan_id' => 'required|exists:plans,id'
+            'plan_id' => 'required|integer|exists:plans,id' // Solo validamos plan_id
         ]);
 
         if ($validator->fails()) {
-            return response()->json($validator->errors(), 400);
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 400);
         }
 
-        $user = User::find($request->user_id);
-        $plan = Plan::find($request->plan_id);
+        $plan = Plan::findOrFail($request->plan_id);
 
-        // Solo esta función maneja TODO el proceso:
+        // Plan gratuito - actualización directa
         if ($plan->is_free) {
-            // Actualización directa si es gratis
             $user->update(['plan_id' => $plan->id]);
-            return response()->json(['message' => 'Plan actualizado']);
-        } else {
-            // Flujo MercadoPago para planes de pago
-            MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
 
+            return response()->json([
+                'success' => true,
+                'message' => 'Plan actualizado exitosamente',
+                'plan' => $plan->name
+            ]);
+        }
+
+        // Plan de pago - flujo MercadoPago
+        MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
+
+        try {
             $preapprovalData = [
                 "back_url" => env('FRONTEND_URL') . "/payment-result",
                 "payer_email" => $user->email,
                 "external_reference" => json_encode([
-                    'user_id' => $user->id,
+                    'user_id' => $user->id,      // Obtenido del usuario autenticado
                     'plan_id' => $plan->id,
-                    'action' => 'update'
+                    'action' => 'update',
+                    'source' => 'plan_update'    // Para identificar el origen en el webhook
                 ]),
+                "reason" => "Actualización a plan {$plan->name}",
                 "auto_recurring" => [
                     "frequency" => 1,
                     "frequency_type" => "months",
                     "transaction_amount" => (float) $plan->price,
-                    "currency_id" => "COP"
+                    "currency_id" => "COP",
+                    "start_date" => now()->addDay()->format('Y-m-d\TH:i:s.000P'),
+                    "end_date" => now()->addYears(3)->format('Y-m-d\TH:i:s.000P')
                 ]
             ];
 
             $subscription = (new PreApprovalClient())->create($preapprovalData);
 
             return response()->json([
-                'payment_url' => $subscription->init_point
+                'success' => true,
+                'payment_url' => $subscription->init_point,
+                'subscription_id' => $subscription->id
             ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error al crear suscripción MercadoPago', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al procesar el pago',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
-
 }
