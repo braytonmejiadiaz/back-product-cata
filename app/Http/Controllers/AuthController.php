@@ -532,7 +532,6 @@ public function webhook(Request $request)
     return response()->json($this->countries);
     }
 
-
     public function updatePlanPayment(Request $request)
     {
         // Obtiene el usuario autenticado desde el token JWT
@@ -555,6 +554,7 @@ public function webhook(Request $request)
             // Plan gratuito - actualización directa
             if ($plan->is_free) {
                 $user->update(['plan_id' => $plan->id]);
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Plan actualizado exitosamente',
@@ -562,16 +562,18 @@ public function webhook(Request $request)
                 ]);
             }
 
-            // Configuración de MercadoPago
+            // Verificar token de MercadoPago
             $mpToken = env('MERCADO_PAGO_ACCESS_TOKEN');
             if (empty($mpToken)) {
-                throw new \Exception("Configuración de MercadoPago incompleta");
+                Log::error('MercadoPago Access Token no configurado');
+                throw new \Exception("Error de configuración del sistema de pagos");
             }
+
             MercadoPagoConfig::setAccessToken($mpToken);
 
-            // Preparar datos para la suscripción
+            // Preparar datos para la suscripción con URLs corregidas
             $preapprovalData = [
-                "back_url" => rtrim(env('FRONTEND_URL'), '/') . "/payment-result",
+                "back_url" => rtrim(env('FRONTEND_URL'), '/') . "/payment/result",
                 "payer_email" => $user->email,
                 "external_reference" => json_encode([
                     'user_id' => $user->id,
@@ -580,7 +582,7 @@ public function webhook(Request $request)
                     'source' => 'plan_update'
                 ]),
                 "reason" => "Actualización a plan {$plan->name}",
-                "auto_recurring" => [ // ¡ATENCIÓN A LA ORTOGRAFÍA! Debe ser "auto_recurring"
+                "auto_recurring" => [ // Asegúrate que es "auto_recurring" con dos 'r'
                     "frequency" => 1,
                     "frequency_type" => "months",
                     "transaction_amount" => (float) number_format($plan->price, 2, '.', ''),
@@ -592,62 +594,110 @@ public function webhook(Request $request)
 
             // Validaciones adicionales
             if (!filter_var($preapprovalData['payer_email'], FILTER_VALIDATE_EMAIL)) {
-                throw new \Exception("Email del pagador no válido");
+                throw new \Exception("Email del pagador no válido: " . $preapprovalData['payer_email']);
             }
 
             if ($preapprovalData['auto_recurring']['transaction_amount'] <= 0) {
-                throw new \Exception("El monto debe ser mayor a cero");
+                throw new \Exception("El monto de la transacción debe ser mayor a cero");
             }
 
-            // Debug: Ver datos que se enviarán
-            Log::debug('Datos para suscripción MercadoPago', $preapprovalData);
+            // Log de depuración
+            Log::info('Intentando crear suscripción en MercadoPago', [
+                'user_id' => $user->id,
+                'plan_id' => $plan->id,
+                'request_data' => $preapprovalData
+            ]);
 
             // Crear la suscripción
             $subscription = (new PreApprovalClient())->create($preapprovalData);
 
-            // Verificar respuesta
+            // Verificar respuesta de MercadoPago
             if (empty($subscription->id)) {
-                throw new \Exception("No se recibió ID de suscripción");
+                Log::error('Respuesta incompleta de MercadoPago', ['response' => $subscription]);
+                throw new \Exception("Respuesta incompleta de MercadoPago");
             }
+
+            // Determinar la URL de pago correcta (producción o sandbox)
+            $paymentUrl = $subscription->init_point ?? $subscription->sandbox_init_point;
+
+            if (empty($paymentUrl)) {
+                throw new \Exception("No se recibió URL de pago válida");
+            }
+
+            Log::info('Suscripción creada exitosamente', [
+                'subscription_id' => $subscription->id,
+                'user_id' => $user->id,
+                'payment_url' => $paymentUrl
+            ]);
 
             return response()->json([
                 'success' => true,
-                'payment_url' => $subscription->init_point ?? $subscription->sandbox_init_point,
+                'payment_url' => $paymentUrl,
                 'subscription_id' => $subscription->id,
                 'plan_name' => $plan->name,
-                'amount' => $plan->price
+                'amount' => $plan->price,
+                'redirect_type' => 'direct' // Indica al frontend que puede redirigir directamente
             ]);
 
         } catch (MPApiException $e) {
-            // Manejo específico de errores de MercadoPago
+            // Manejo específico de errores de la API de MercadoPago
             $errorDetails = [
                 'status' => $e->getStatusCode(),
                 'response' => $e->getApiResponse(),
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
+                'user_id' => $user->id ?? null,
+                'plan_id' => $request->plan_id ?? null
             ];
+
             Log::error('Error MercadoPago API', $errorDetails);
 
             return response()->json([
                 'success' => false,
                 'message' => 'Error al procesar el pago',
                 'error' => $errorDetails['response']['message'] ?? $e->getMessage(),
-                'details' => $errorDetails['response']['error'] ?? null
-            ], 500);
+                'details' => $errorDetails['response']['error'] ?? null,
+                'status_code' => $errorDetails['status'] ?? 500
+            ], $errorDetails['status'] ?? 500);
 
         } catch (\Throwable $e) {
-            Log::error('Error en updatePlanPayment', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            // Preparar detalles del error
+            $errorDetails = [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'user_id' => $user->id ?? null,
+                'plan_id' => $request->plan_id ?? null
+            ];
 
-            return response()->json([
+            // Si es una excepción de Guzzle/HTTP
+            if (method_exists($e, 'getResponse')) {
+                try {
+                    $response = $e->getResponse();
+                    $errorDetails['mp_status'] = $response->getStatusCode();
+                    $errorDetails['mp_response'] = json_decode($response->getBody()->getContents(), true);
+                } catch (\Exception $parseError) {
+                    $errorDetails['mp_error'] = 'Error al parsear respuesta de MP';
+                }
+            }
+
+            // Log detallado
+            Log::error('Error en updatePlanPayment', $errorDetails);
+
+            // Construir respuesta de error
+            $response = [
                 'success' => false,
-                'message' => 'Error inesperado al procesar el pago',
+                'message' => 'Error al procesar el pago',
                 'error' => $e->getMessage()
-            ], 500);
+            ];
+
+            // Agregar detalles de MP si están disponibles
+            if (isset($errorDetails['mp_response'])) {
+                $response['mp_error'] = $errorDetails['mp_response']['message'] ?? null;
+                $response['mp_details'] = $errorDetails['mp_response']['error'] ?? null;
+            }
+
+            return response()->json($response, 500);
         }
     }
-
-
 
 }
