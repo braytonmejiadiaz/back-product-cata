@@ -20,14 +20,14 @@ class ProductController extends Controller
      */
     public function index(Request $request)
     {
-        $userId = auth()->id();
+        $user = auth()->user();
+        $userId = $user->id;
         $search = $request->search;
         $categorie_first_id = $request->categorie_first_id;
         $categorie_second_id = $request->categorie_second_id;
         $categorie_third_id = $request->categorie_third_id;
         $brand_id = $request->brand_id;
 
-        // Filtra los productos por el user_id del usuario autenticado
         $products = Product::where('user_id', $userId)
             ->filterAdvanceProduct($search, $categorie_first_id, $categorie_second_id, $categorie_third_id, $brand_id)
             ->orderBy("id", "desc")
@@ -36,6 +36,8 @@ class ProductController extends Controller
         return response()->json([
             "total" => $products->total(),
             "products" => ProductCollection::make($products),
+            "product_limit" => $user->plan->product_limit,
+            "current_products" => $user->products()->count()
         ]);
     }
 
@@ -44,29 +46,28 @@ class ProductController extends Controller
      */
     public function config()
     {
-        $userId = auth()->id(); // Obtén el ID del usuario autenticado
+        $userId = auth()->id();
 
-        // Filtra las categorías y marcas por el user_id del usuario autenticado
         $categories_first = Categorie::where("state", 1)
             ->where("categorie_second_id", NULL)
             ->where("categorie_third_id", NULL)
-            ->where("user_id", $userId) // Filtra por user_id
+            ->where("user_id", $userId)
             ->get();
 
         $categories_seconds = Categorie::where("state", 1)
             ->where("categorie_second_id", "<>", NULL)
             ->where("categorie_third_id", NULL)
-            ->where("user_id", $userId) // Filtra por user_id
+            ->where("user_id", $userId)
             ->get();
 
         $categories_thirds = Categorie::where("state", 1)
             ->where("categorie_second_id", "<>", NULL)
             ->where("categorie_third_id", "<>", NULL)
-            ->where("user_id", $userId) // Filtra por user_id
+            ->where("user_id", $userId)
             ->get();
 
         $brands = Brand::where("state", 1)
-            ->where("user_id", $userId) // Filtra por user_id
+            ->where("user_id", $userId)
             ->get();
 
         return response()->json([
@@ -82,28 +83,48 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {
-        // Verifica si ya existe un producto con el mismo título para el usuario autenticado
-        $isValid = Product::where("user_id", auth()->id())
+        $user = auth()->user();
+        $plan = $user->plan;
+
+        // Verificar límite de productos
+        if ($plan->product_limit !== null &&
+            $user->products()->count() >= $plan->product_limit) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "Has alcanzado el límite de productos para tu plan. Máximo permitido: " . $plan->product_limit
+            ]);
+        }
+
+        // Verificar título duplicado
+        $isValid = Product::where("user_id", $user->id)
                           ->where("title", $request->title)
                           ->first();
 
         if ($isValid) {
-            return response()->json(["message" => 403, "message_text" => "Ya existe un producto con este título."]);
+            return response()->json([
+                "message" => 403,
+                "message_text" => "Ya existe un producto con este título."
+            ]);
         }
 
+        // Procesar imagen portada
         if ($request->hasFile("portada")) {
             $path = Storage::putFile("products", $request->file("portada"));
             $request->request->add(["imagen" => $path]);
         }
 
-        $request->request->add(["slug" => Str::slug($request->title)]);
-        $request->request->add(["tags" => $request->multiselect]);
-        $request->request->add(["user_id" => auth()->id()]); // Asigna el user_id del usuario autenticado
+        // Crear producto
+        $request->request->add([
+            "slug" => Str::slug($request->title),
+            "tags" => $request->multiselect,
+            "user_id" => $user->id
+        ]);
 
         $product = Product::create($request->all());
 
         return response()->json([
             "message" => 200,
+            "product" => ProductResource::make($product)
         ]);
     }
 
@@ -114,13 +135,19 @@ class ProductController extends Controller
     {
         $product_id = $request->product_id;
 
-        // Verifica que el producto al que se le está agregando la imagen sea del usuario autenticado
+        // Verificar propiedad del producto
         $product = Product::where('id', $product_id)
                           ->where('user_id', auth()->id())
                           ->firstOrFail();
 
+        // Procesar imagen
         if ($request->hasFile("imagen_add")) {
             $path = Storage::putFile("products", $request->file("imagen_add"));
+        } else {
+            return response()->json([
+                "message" => 400,
+                "message_text" => "No se ha subido ninguna imagen"
+            ], 400);
         }
 
         $product_imagen = ProductImage::create([
@@ -129,6 +156,7 @@ class ProductController extends Controller
         ]);
 
         return response()->json([
+            "message" => 200,
             "imagen" => [
                 "id" => $product_imagen->id,
                 "imagen" => env("APP_URL") . "storage/" . $product_imagen->imagen,
@@ -145,7 +173,10 @@ class ProductController extends Controller
             ->where('user_id', auth()->id())
             ->firstOrFail();
 
-        return response()->json(["product" => ProductResource::make($product)]);
+        return response()->json([
+            "message" => 200,
+            "product" => ProductResource::make($product)
+        ]);
     }
 
     /**
@@ -157,16 +188,20 @@ class ProductController extends Controller
                           ->where('user_id', auth()->id())
                           ->firstOrFail();
 
-        // Verifica si ya existe un producto con el mismo título para el usuario autenticado, excluyendo el producto actual
+        // Verificar título duplicado
         $isValid = Product::where("user_id", auth()->id())
                           ->where("id", "<>", $id)
                           ->where("title", $request->title)
                           ->first();
 
         if ($isValid) {
-            return response()->json(["message" => 403, "message_text" => "Ya existe un producto con este título."]);
+            return response()->json([
+                "message" => 403,
+                "message_text" => "Ya existe un producto con este título."
+            ]);
         }
 
+        // Procesar imagen portada
         if ($request->hasFile("portada")) {
             if ($product->imagen) {
                 Storage::delete($product->imagen);
@@ -175,12 +210,17 @@ class ProductController extends Controller
             $request->request->add(["imagen" => $path]);
         }
 
-        $request->request->add(["slug" => Str::slug($request->title)]);
-        $request->request->add(["tags" => $request->multiselect]);
+        // Actualizar producto
+        $request->request->add([
+            "slug" => Str::slug($request->title),
+            "tags" => $request->multiselect
+        ]);
+
         $product->update($request->all());
 
         return response()->json([
             "message" => 200,
+            "product" => ProductResource::make($product)
         ]);
     }
 
@@ -193,10 +233,21 @@ class ProductController extends Controller
             ->where('user_id', auth()->id())
             ->firstOrFail();
 
+        // Eliminar imagen principal
+        if ($product->imagen) {
+            Storage::delete($product->imagen);
+        }
+
+        // Eliminar imágenes secundarias
+        foreach ($product->images as $image) {
+            Storage::delete($image->imagen);
+            $image->delete();
+        }
+
         $product->delete();
 
         return response()->json([
-            "message" => 200,
+            "message" => 200
         ]);
     }
 
@@ -207,14 +258,16 @@ class ProductController extends Controller
     {
         $productImage = ProductImage::findOrFail($id);
 
-        // Verifica que el producto al que pertenece la imagen sea del usuario autenticado
+        // Verificar propiedad del producto
         $product = Product::where('id', $productImage->product_id)
             ->where('user_id', auth()->id())
             ->firstOrFail();
 
+        // Eliminar imagen física
         if ($productImage->imagen) {
             Storage::delete($productImage->imagen);
         }
+
         $productImage->delete();
 
         return response()->json([

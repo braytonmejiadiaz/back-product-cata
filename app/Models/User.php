@@ -12,6 +12,8 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use App\Models\Plan;
+
 
 class User extends Authenticatable implements JWTSubject
 {
@@ -102,6 +104,10 @@ class User extends Authenticatable implements JWTSubject
     public function products() {
         return $this->hasMany(Product::class);
     }
+    public function plan()
+{
+    return $this->belongsTo(Plan::class);
+}
 
 
 }

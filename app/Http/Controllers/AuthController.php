@@ -56,6 +56,7 @@ class AuthController extends Controller
         'country_code' => 'required|string',
     ]);
 
+
     if ($validator->fails()) {
         return response()->json($validator->errors()->toJson(), 400);
     }
@@ -66,6 +67,34 @@ class AuthController extends Controller
     }
 
     $plan = Plan::find(request()->plan_id);
+
+        // Si es plan gratis, crear usuario directamente
+        if ($plan->is_free) {
+            $user = User::create([
+                'name' => request()->name,
+                'surname' => request()->surname,
+                'phone' => request()->country_code . request()->phone,
+                'type_user' => 1,
+                'email' => request()->email,
+                'uniqd' => uniqid(),
+                'store_name' => request()->store_name,
+                'slug' => $this->generateUniqueSlug(request()->store_name),
+                'password' => bcrypt(request()->password),
+                'plan_id' => $plan->id,
+                'email_verified_at' => now()
+            ]);
+
+            $token = auth('api')->login($user);
+
+            return response()->json([
+                'message' => 'Registro exitoso',
+                'access_token' => $token,
+                'token_type' => 'bearer',
+                'expires_in' => auth('api')->factory()->getTTL() * 60,
+                'user' => $user
+            ], 200);
+        }
+
 
     MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
 
@@ -300,6 +329,7 @@ private function generateUniqueSlug($storeName)
             'menu_color' => $user->menu_color,
             'button_color' => $user->button_color,
             'button_radio' => $user->button_radio,
+            'plan_id' => $user->plan_id,
         ]);
     }
 
@@ -484,5 +514,60 @@ public function webhook(Request $request)
     return response()->json($this->countries);
     }
 
+
+
+
+
+    public function updatePlanPayment(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'user_id' => 'required|exists:users,id',
+        'plan_id' => 'required|exists:plans,id'
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json($validator->errors()->toJson(), 400);
+    }
+
+    $user = User::find($request->user_id);
+    $plan = Plan::find($request->plan_id);
+
+    MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
+
+    try {
+        $preapprovalClient = new PreApprovalClient();
+        $preapprovalData = [
+            "back_url" => env('FRONTEND_URL') . "/payment-result",
+            "payer_email" => $user->email,
+            "external_reference" => json_encode([
+                'user_id' => $user->id,
+                'plan_id' => $plan->id,
+                'action' => 'update'
+            ]),
+            "reason" => "Actualización a plan " . $plan->name,
+            "auto_recurring" => [
+                "frequency" => 1,
+                "frequency_type" => "months",
+                "transaction_amount" => (float) $plan->price,
+                "currency_id" => "COP",
+                "start_date" => now()->addDay(10)->toISOString(),
+                "end_date" => now()->addYears(3)->toISOString(),
+            ]
+        ];
+        $subscription = $preapprovalClient->create($preapprovalData);
+        return response()->json([
+            'message' => 'Por favor completa el pago para actualizar tu plan',
+            'payment_url' => $subscription->init_point,
+            'subscription_id' => $subscription->id
+        ], 200);
+
+    } catch (MPApiException $e) {
+        Log::error('Error en MercadoPago', [
+            'message' => $e->getMessage(),
+            'status' => $e->getHttpStatusCode()
+        ]);
+        return response()->json(['error' => 'Error en el procesamiento de pago'], 500);
+    }
+}
 
 }

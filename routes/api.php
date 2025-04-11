@@ -49,6 +49,7 @@ Route::group([
     Route::get('payment/failure', [AuthController::class, 'paymentFailure'])->name('failure');
     Route::get('payment/pending', [AuthController::class, 'paymentPending'])->name('pending');
     Route::post('/mercadopago/webhook', [AuthController::class, 'webhook'])->name('mercadopago.webhook');
+    Route::post('/updatePlanPayment', [AuthController::class, 'updatePlanPayment'])->name('updatePlanPayment');
     Route::get('/countries', [AuthController::class, 'getCountries']);
 
 
