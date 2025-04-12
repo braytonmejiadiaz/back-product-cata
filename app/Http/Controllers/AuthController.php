@@ -122,7 +122,7 @@ class AuthController extends Controller
                     "frequency_type" => "months",
                     "transaction_amount" => (float) number_format($plan->price, 2, '.', ''),
                     "currency_id" => "COP",
-                    "start_date" => now()->addDay()->format('Y-m-d\TH:i:s.000\Z'),
+                    "start_date" => now()->addDay(1)->format('Y-m-d\TH:i:s.000\Z'),
                     "end_date" => now()->addYears(3)->format('Y-m-d\TH:i:s.000\Z'),
                 ]
             ];

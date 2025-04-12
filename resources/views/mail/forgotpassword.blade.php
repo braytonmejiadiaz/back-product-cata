@@ -17,7 +17,7 @@
             background: #ffffff;
         }
         .header {
-            background: #9128df;
+            background: #009974;
             padding: 20px 0;
             text-align: center;
         }
@@ -32,11 +32,11 @@
         .code-box {
             font-size: 24px;
             font-weight: bold;
-            color: #9128df;
+            color: #009974;
             margin: 30px 0;
             padding: 15px;
             background: #f8f0ff;
-            border: 1px dashed #c084fc;
+            border: 1px dashed #009969;
             border-radius: 8px;
             display: inline-block;
         }
