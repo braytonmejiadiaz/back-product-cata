@@ -54,7 +54,7 @@
             border-radius: 25px;
         }
         .footer {
-            background-color: #949196;
+            background-color: #009975;
             color: #ffffff;
             text-align: center;
             padding: 20px 50px;
@@ -90,14 +90,6 @@
         <!-- Footer -->
         <div class="footer">
             <p>Cali, Colombia<br><br><a href="mailto:infotreggio@gmail.com">infotreggio@gmail.com</a> - <a href="https://treggio.co">Treggio</a></p>
-
-            <!-- Social Media Links -->
-            <p>Síguenos en nuestras redes sociales:</p>
-                <a href="#"><img src="../images/ico_facebook.png" alt="Facebook" width="30"></a>
-                <a href="#"><img src="../images/ico_instagram.png" alt="Instagram" width="30"></a>
-                <a href="#"><img src="../images/ico_twitter.png" alt="Twitter" width="30"></a>
-                <a href="#"><img src="../images/ico_pinterest.png" alt="Pinterest" width="30"></a>
-
         </div>
     </div>
 </body>
