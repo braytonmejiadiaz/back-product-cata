@@ -32,7 +32,7 @@ class AuthController extends Controller
     public function __construct()
     {
         $this->middleware('auth:api', ['except' => ['login', 'register','login_ecommerce','verified_auth',
-        'verified_email','verified_code','new_password', 'webhook', 'getCountries', 'updatePlanPayment'
+        'verified_email','verified_code','new_password', 'webhook', 'getCountries',
         ]]);
     }
 
