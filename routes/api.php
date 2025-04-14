@@ -23,6 +23,8 @@ use App\Http\Controllers\Admin\Product\ProductVariationsAnidadoController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\UserController;
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -37,6 +39,7 @@ use App\Http\Controllers\PurchaseController;
 // Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 //     return $request->user();
 // });
+Route::get('/users', [UserController::class, 'index']);
 
 Route::group([
     // 'middleware' => 'auth:api',
