@@ -82,6 +82,17 @@ class AuthController extends Controller
                 'email_verified_at' => now()
             ]);
 
+                    // Enviar email de confirmación
+                try {
+                    Mail::to($user->email)->send(new VerifiedMail($user));
+                    Log::info('Correo de verificación enviado', ['email' => $user->email]);
+                } catch (\Exception $e) {
+                    Log::error('Error al enviar correo de verificación', [
+                        'email' => $user->email,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+
             $token = auth('api')->login($user);
 
             return response()->json([
@@ -475,6 +486,16 @@ public function webhook(Request $request)
                             'email_verified_at' => now()
                         ]);
                         Log::info('✅ Usuario creado exitosamente', ['user_id' => $user->id]);
+                        // Enviar email de confirmación
+                        try {
+                            Mail::to($user->email)->send(new VerifiedMail($user));
+                            Log::info('Correo de verificación enviado', ['email' => $user->email]);
+                        } catch (\Exception $e) {
+                            Log::error('Error al enviar correo de verificación', [
+                                'email' => $user->email,
+                                'error' => $e->getMessage()
+                            ]);
+                        }
                     }
                 } elseif (isset($external['action']) && $external['action'] === 'update') {
                     // ACTUALIZACIÓN DE PLAN
