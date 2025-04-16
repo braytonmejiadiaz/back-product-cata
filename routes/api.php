@@ -24,6 +24,8 @@ use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\CustomDomainController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -185,4 +187,11 @@ Route::group([
     'prefix' => 'api',
 ], function ($router) {
     Route::get('/purchases', [PurchaseController::class, 'index']);
+});
+
+
+// routes/api.php
+Route::middleware('auth:api')->group(function() {
+    Route::post('/connect-domain', [CustomDomainController::class, 'connect']);
+    Route::get('/verify-domain', [CustomDomainController::class, 'verify']);
 });

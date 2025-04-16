@@ -13,6 +13,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use App\Models\Plan;
+use App\Models\CustomDomain;
+
 
 
 
@@ -110,5 +112,9 @@ class User extends Authenticatable implements JWTSubject
     return $this->belongsTo(Plan::class);
 }
 
+public function customDomain()
+{
+    return $this->hasOne(\App\Models\CustomDomain::class);
+}
 
 }
