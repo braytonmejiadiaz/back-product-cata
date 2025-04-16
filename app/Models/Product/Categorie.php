@@ -17,7 +17,7 @@ class Categorie extends Model
         "name",
         "imagen",
         "categorie_second_id",
-        "categorie_third_id",
+        // "categorie_third_id",
         "position",
         "type_categorie",
         "state",
@@ -37,9 +37,9 @@ class Categorie extends Model
         return $this->belongsTo(Categorie::class,"categorie_second_id");
     }
 
-    public function categorie_third() {
-        return $this->belongsTo(Categorie::class,"categorie_third_id");
-    }
+    // public function categorie_third() {
+    //     return $this->belongsTo(Categorie::class,"categorie_third_id");
+    // }
 
     public function categorie_seconds() {
         return $this->hasMany(Categorie::class,"categorie_second_id");
@@ -53,9 +53,9 @@ class Categorie extends Model
         return $this->hasMany(Product::class,"categorie_second_id");
     }
 
-    public function product_categorie_thirds(){
-        return $this->hasMany(Product::class,"categorie_third_id");
-    }
+    // public function product_categorie_thirds(){
+    //     return $this->hasMany(Product::class,"categorie_third_id");
+    // }
 
     public function discount_categories() {
         return $this->hasMany(DiscountCategorie::class,"categorie_id");

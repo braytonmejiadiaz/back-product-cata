@@ -12,6 +12,8 @@ use App\Models\Product\ProductImage;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\Product\ProductResource;
 use App\Http\Resources\Product\ProductCollection;
+use App\Models\Plan;
+
 
 class ProductController extends Controller
 {
@@ -274,4 +276,35 @@ class ProductController extends Controller
             "message" => 200
         ]);
     }
+
+
+// En App\Http\Controllers\Admin\Product\ProductController.php
+public function limits(Request $request)
+{
+    $user = auth()->user();
+
+    // Verificar si el usuario está autenticado
+    if (!$user) {
+        return response()->json([
+            'message' => 'Usuario no autenticado',
+            'product_limit' => 0,
+            'current_products' => 0
+        ], 401);
+    }
+
+    // Verificar si el usuario tiene plan asignado
+    if (!$user->plan) {
+        return response()->json([
+            'message' => 'El usuario no tiene un plan asignado',
+            'product_limit' => 0,
+            'current_products' => $user->products()->count()
+        ], 200);
+    }
+
+    return response()->json([
+        "product_limit" => $user->plan->product_limit ?? 0,
+        "current_products" => $user->products()->count()
+    ]);
+}
+
 }

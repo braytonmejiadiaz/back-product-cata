@@ -75,6 +75,7 @@ Route::group([
     "middleware" => "auth:api",
     "prefix" => "admin",
 ],function ($router) {
+    Route::get('limits', [ProductController::class, 'limits']);
 
 
     Route::post('/purchases', [PurchaseController::class, 'store']);
@@ -96,6 +97,7 @@ Route::group([
     Route::post("products/index",[ProductController::class,"index"]);
     Route::resource("products",ProductController::class);
     Route::post("products/{id}",[ProductController::class,"update"]);
+
 
     Route::resource("brands",BrandController::class);
 

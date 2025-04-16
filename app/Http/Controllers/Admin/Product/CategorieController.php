@@ -37,12 +37,12 @@ class CategorieController extends Controller
         // Filtra las categorías por el user_id del usuario autenticado
         $categories_first = Categorie::where("user_id", auth()->id())
             ->where("categorie_second_id", NULL)
-            ->where("categorie_third_id", NULL)
+            // ->where("categorie_third_id", NULL)
             ->get();
 
         $categories_seconds = Categorie::where("user_id", auth()->id())
             ->where("categorie_second_id", "<>", NULL)
-            ->where("categorie_third_id", NULL)
+            // ->where("categorie_third_id", NULL)
             ->get();
 
         return response()->json([
@@ -134,8 +134,7 @@ class CategorieController extends Controller
         }
 
         if ($categorie->product_categorie_firsts->count() > 0 ||
-            $categorie->product_categorie_secodns->count() > 0 ||
-            $categorie->product_categorie_thirds->count() > 0) {
+            $categorie->product_categorie_secodns->count() > 0) {
             return response()->json(["message" => 403, "message_text" => "LA CATEGORIA YA ESTA RELACIONADA CON ALGUNOS O UN PRODUCTO"]);
         }
 

@@ -353,10 +353,10 @@ class HomeController extends Controller
                     'id' => $product->categorie_second->id,
                     'name' => $product->categorie_second->name,
                 ] : null,
-                'categorie_third' => $product->categorie_third ? [
-                    'id' => $product->categorie_third->id,
-                    'name' => $product->categorie_third->name,
-                ] : null,
+                // 'categorie_third' => $product->categorie_third ? [
+                //     'id' => $product->categorie_third->id,
+                //     'name' => $product->categorie_third->name,
+                // ] : null,
                 'images' => $product->images->map(function ($image) {
                     return [
                         'id' => $image->id,
