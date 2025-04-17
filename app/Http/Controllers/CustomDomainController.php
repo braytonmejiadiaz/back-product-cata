@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use App\Models\User;
+
 
 class CustomDomainController extends Controller
 {
@@ -57,6 +59,7 @@ class CustomDomainController extends Controller
 
     public function getConfig(Request $request)
 {
+    $user = auth()->user();
     return response()->json([
         'slug' => $request->user()->slug,
         'custom_domain' => $request->user()->customDomain
