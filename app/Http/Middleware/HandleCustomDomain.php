@@ -6,6 +6,7 @@ use Closure;
 use App\Models\User;
 use App\Models\CustomDomain;
 use Illuminate\Support\Facades\View;
+use Illuminate\Support\Facades\Cache;
 
 class HandleCustomDomain
 {
