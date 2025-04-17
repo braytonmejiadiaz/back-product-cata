@@ -191,7 +191,10 @@ Route::group([
 
 
 // routes/api.php
-Route::middleware('auth:api')->group(function() {
+Route::group([
+    "middleware" => 'auth:api',
+    "prefix" => "admin",
+],function($router) {
     Route::get('/user-domain-config', [CustomDomainController::class, 'getConfig']);
     Route::post('/connect-domain', [CustomDomainController::class, 'connect']);
     Route::get('/verify-domain', [CustomDomainController::class, 'verify']);
