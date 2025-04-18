@@ -187,7 +187,6 @@ Route::group([
     Route::get('/purchases', [PurchaseController::class, 'index']);
 });
 
-
 // routes/api.php
 Route::group([
     "middleware" => 'auth:api',
