@@ -78,8 +78,6 @@ Route::group([
     "prefix" => "admin",
 ],function ($router) {
     Route::get('limits', [ProductController::class, 'limits']);
-
-
     Route::post('/purchases', [PurchaseController::class, 'store']);
     Route::get('/purchases', [PurchaseController::class, 'index']);
     Route::get("categories/config",[CategorieController::class,"config"]);

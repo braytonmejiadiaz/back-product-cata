@@ -57,12 +57,13 @@ class CustomDomainController extends Controller
         return $hasValidCname || $hasValidTxt;
     }
 
+
     public function getConfig(Request $request)
-{
-    $user = auth()->user();
-    return response()->json([
-        'slug' => $request->user()->slug,
-        'custom_domain' => $request->user()->customDomain
-    ]);
-}
+    {
+        $user = auth()->user();
+        return response()->json([
+            'slug' => $request->user()->slug,
+            'custom_domain' => $request->user()->customDomain
+        ]);
+    }
 }
