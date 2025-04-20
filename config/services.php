@@ -34,5 +34,10 @@ return [
         'token' => env('MERCADO_PAGO_ACCESS_TOKEN'),
         'public_key' => env('MERCADO_PAGO_PUBLIC_KEY'),
     ],
+    'deepseek' => [
+        'api_key' => env('DEEPSEEK_API_KEY'),
+        'base_uri' => env('DEEPSEEK_ENDPOINT', 'https://api.deepseek.com/v1/'),
+        'timeout' => env('DEEPSEEK_TIMEOUT', 30),
+    ],
 
 ];

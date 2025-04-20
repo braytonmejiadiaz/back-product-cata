@@ -50,13 +50,36 @@ class HomeController extends Controller
         return config('app.url') . '/storage/' . ltrim($path, '/');
     }
 
-    public function getUserDataBySlug(string $slug)
+    /**
+     * Obtiene el usuario actual basado en el dominio o slug
+     */
+    private function getCurrentUser($slug = null)
     {
+        // Si es un dominio personalizado, obtener el usuario del request
+        if (request()->is_custom_domain ?? false) {
+            $user = request()->current_store_owner;
+
+            // Verificar que el slug coincida (si se proporciona)
+            if ($slug && $user->slug !== $slug) {
+                abort(404, 'Tienda no encontrada');
+            }
+
+            return $user;
+        }
+
+        // Buscar usuario por slug (acceso normal)
         $user = User::where('slug', $slug)->first();
 
         if (!$user) {
-            return response()->json(['error' => 'Usuario no encontrado'], 404);
+            abort(404, 'Tienda no encontrada');
         }
+
+        return $user;
+    }
+
+    public function getUserDataBySlug(string $slug)
+    {
+        $user = $this->getCurrentUser($slug);
 
         return response()->json([
             'id' => $user->id,
@@ -88,6 +111,7 @@ class HomeController extends Controller
             'mision' => $user->mision,
             'vision' => $user->vision,
             'button_radio' => $user->button_radio,
+            'is_custom_domain' => request()->is_custom_domain ?? false
         ]);
     }
 
@@ -112,11 +136,7 @@ class HomeController extends Controller
 
     public function mostrarTiendaUsuario($slug)
     {
-        $user = User::where('slug', $slug)->first();
-
-        if (!$user) {
-            return response()->json(['error' => 'Tienda no encontrada'], 404);
-        }
+        $user = $this->getCurrentUser($slug);
 
         $productos = Product::where('user_id', $user->id)->where('state', 2)->get();
         $sliders = $this->getSlidersByUserId($user->id);
@@ -130,6 +150,8 @@ class HomeController extends Controller
                 'bio' => $user->bio,
                 'mision' => $user->mision,
                 'vision' => $user->vision,
+                'slug' => $user->slug,
+                'is_custom_domain' => request()->is_custom_domain ?? false
             ],
             'productos' => ProductEcommerceCollection::make($productos),
             'sliders' => $sliders->map(function ($slider) {
@@ -177,6 +199,7 @@ class HomeController extends Controller
                 'store_name' => $user->store_name,
                 'avatar' => $this->getFullImageUrl($user->avatar),
                 'bio' => $user->bio,
+                'is_custom_domain' => request()->is_custom_domain ?? false
             ],
             'productos' => ProductEcommerceCollection::make($productos),
             'sliders' => $sliders->map(function ($slider) {
@@ -207,11 +230,7 @@ class HomeController extends Controller
 
     public function getProductsByUserSlug($slug)
     {
-        $user = User::where('slug', $slug)->first();
-
-        if (!$user) {
-            return response()->json(['error' => 'Usuario no encontrado'], 404);
-        }
+        $user = $this->getCurrentUser($slug);
 
         $productos = Product::where('user_id', $user->id)->where('state', 2)->get();
         $sliders = $this->getSlidersByUserId($user->id);
@@ -224,6 +243,7 @@ class HomeController extends Controller
                 'store_name' => $user->store_name,
                 'avatar' => $this->getFullImageUrl($user->avatar),
                 'bio' => $user->bio,
+                'is_custom_domain' => request()->is_custom_domain ?? false
             ],
             'productos' => ProductEcommerceCollection::make($productos),
             'sliders' => $sliders->map(function ($slider) {
@@ -254,11 +274,7 @@ class HomeController extends Controller
 
     public function getCategoriesByUserSlug($slug)
     {
-        $user = User::where('slug', $slug)->first();
-
-        if (!$user) {
-            return response()->json(['error' => 'Usuario no encontrado'], 404);
-        }
+        $user = $this->getCurrentUser($slug);
 
         $categories = $this->getCategoriesByUserId($user->id);
 
@@ -274,11 +290,7 @@ class HomeController extends Controller
 
     public function getSlidersByUserSlug($slug)
     {
-        $user = User::where('slug', $slug)->first();
-
-        if (!$user) {
-            return response()->json(['error' => 'Usuario no encontrado'], 404);
-        }
+        $user = $this->getCurrentUser($slug);
 
         $sliders = Slider::where("state", 1)
             ->where("user_id", $user->id)
@@ -310,6 +322,14 @@ class HomeController extends Controller
 
         if (!$product) {
             return response()->json(['error' => 'Producto no encontrado'], 404);
+        }
+
+        // Verificar si es dominio personalizado y el producto pertenece al usuario
+        if (request()->is_custom_domain ?? false) {
+            $user = request()->current_store_owner;
+            if ($product->user_id !== $user->id) {
+                return response()->json(['error' => 'Producto no encontrado'], 404);
+            }
         }
 
         $variations = [];
@@ -353,10 +373,6 @@ class HomeController extends Controller
                     'id' => $product->categorie_second->id,
                     'name' => $product->categorie_second->name,
                 ] : null,
-                // 'categorie_third' => $product->categorie_third ? [
-                //     'id' => $product->categorie_third->id,
-                //     'name' => $product->categorie_third->name,
-                // ] : null,
                 'images' => $product->images->map(function ($image) {
                     return [
                         'id' => $image->id,
@@ -365,6 +381,7 @@ class HomeController extends Controller
                 }),
                 'variations' => $variations,
             ],
+            'is_custom_domain' => request()->is_custom_domain ?? false
         ]);
     }
 }

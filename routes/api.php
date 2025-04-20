@@ -24,6 +24,7 @@ use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\AiMarketingController;
 use App\Http\Controllers\CustomDomainController;
 
 
@@ -195,4 +196,22 @@ Route::group([
     Route::get('/user-domain-config', [CustomDomainController::class, 'getConfig']);
     Route::post('/connect-domain', [CustomDomainController::class, 'connect']);
     Route::get('/verify-domain', [CustomDomainController::class, 'verify']);
+    Route::delete('/disconnect-domain', [CustomDomainController::class, 'disconnect']);
 });
+
+
+Route::group([
+    "middleware" => 'auth:api',
+    "prefix" => "admin",
+],function($router) {
+    Route::post('/generate', [AiMarketingController::class, 'generate']);
+    Route::get('/history', [AiMarketingController::class, 'history']);
+});
+
+// Route::middleware(['handle.custom.domain'])->group(function() {
+//     Route::get('/tienda/{slug}', [HomeController::class, 'mostrarTiendaUsuario'])->name('tienda.show');
+//     Route::get('/tienda/{slug}/categories', [HomeController::class, 'getCategoriesByUserSlug']);
+//     Route::get('/tienda/{slug}/sliders', [HomeController::class, 'getSlidersByUserSlug']);
+//     Route::get('/productos/{slug}', [HomeController::class, 'getProductosBySlug']);
+//     Route::get('/products/{productId}', [HomeController::class, 'getProductById']);
+// });

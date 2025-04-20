@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\User;
 
 class CustomDomain extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'user_id',
         'domain',
@@ -16,8 +17,17 @@ class CustomDomain extends Model
         'verification_code'
     ];
 
+    protected $casts = [
+        'is_verified' => 'boolean'
+    ];
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function scopeVerified($query)
+    {
+        return $query->where('is_verified', true);
     }
 }

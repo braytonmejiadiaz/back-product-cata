@@ -7,12 +7,13 @@
     "require": {
         "php": "^8.1",
         "barryvdh/laravel-dompdf": "^2.0",
-        "guzzlehttp/guzzle": "^7.2",
+        "guzzlehttp/guzzle": "^7.0",
         "laravel/framework": "^10.10",
         "laravel/sanctum": "^3.3",
         "laravel/tinker": "^2.8",
         "maatwebsite/excel": "^3.1",
         "mercadopago/dx-php": "3.0.8",
+        "openai-php/laravel": "^0.10.1",
         "tymon/jwt-auth": "^2.0"
     },
     "require-dev": {

@@ -15,6 +15,38 @@ use App\Models\Plan;
 
 class Product extends Model
 {
+
+
+
+     // Relación con la categoría principal (primer nivel)
+     public function categorieFirst()
+     {
+         return $this->belongsTo(Categorie::class, 'categorie_first_id');
+     }
+
+     // Relación con la categoría secundaria (segundo nivel)
+     public function categorieSecond()
+     {
+         return $this->belongsTo(Categorie::class, 'categorie_second_id');
+     }
+
+     // Relación con la categoría terciaria (tercer nivel)
+     public function categorieThird()
+     {
+         return $this->belongsTo(Categorie::class, 'categorie_third_id');
+     }
+
+     // Método para obtener todas las categorías relacionadas
+     public function getCategoriesAttribute()
+     {
+         return [
+             'first' => $this->categorieFirst,
+             'second' => $this->categorieSecond,
+             'third' => $this->categorieThird
+         ];
+     }
+
+
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
@@ -231,6 +263,9 @@ class Product extends Model
 
         return $query;
     }
+
+
+
 }
 
     // Relación con el usuario
