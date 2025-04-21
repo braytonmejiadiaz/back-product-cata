@@ -18,7 +18,6 @@ class UserPixel extends Model
         'platform',
         'pixel_id',
         'is_active',
-        'tienda_slug'
     ];
 
 
