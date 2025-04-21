@@ -221,6 +221,7 @@ Route::group([
 Route::group([
     'middleware' => 'auth:api',
     'prefix' => 'admin'
-], function() {
+], function($router) {
     Route::apiResource('/pixels', UserPixelController::class);
 });
+Route::get('/tiendas/{tienda}/pixel', [UserPixelController::class, 'showByTienda']);

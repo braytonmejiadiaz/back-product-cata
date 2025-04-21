@@ -14,10 +14,11 @@ class UserPixel extends Model
      * Campos asignables masivamente
      */
     protected $fillable = [
-        'user_id',     // Asegúrate que existe en tu tabla
-        'platform',    // Campo que menciona el error
-        'pixel_id',    // Campo necesario según tu lógica
-        'is_active'    // Si existe en tu estructura
+        'user_id',
+        'platform',
+        'pixel_id',
+        'is_active',
+        'tienda_slug'
     ];
 
 

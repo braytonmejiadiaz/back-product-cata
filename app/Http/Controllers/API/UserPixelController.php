@@ -35,4 +35,17 @@ class UserPixelController extends Controller
 
         return response()->json(null, 204);
     }
+
+    public function showByTienda($tiendaSlug)
+{
+    $pixel = UserPixel::where('tienda_slug', $tiendaSlug)
+                     ->where('platform', 'meta')
+                     ->first();
+
+    if (!$pixel) {
+        return response()->json(['pixel_id' => null, 'is_active' => false]);
+    }
+
+    return response()->json($pixel);
+}
 }
