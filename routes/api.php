@@ -26,6 +26,9 @@ use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AiMarketingController;
 use App\Http\Controllers\CustomDomainController;
+use App\Http\Controllers\API\UserPixelController;
+
+
 
 
 /*
@@ -215,3 +218,9 @@ Route::group([
 //     Route::get('/productos/{slug}', [HomeController::class, 'getProductosBySlug']);
 //     Route::get('/products/{productId}', [HomeController::class, 'getProductById']);
 // });
+Route::group([
+    'middleware' => 'auth:api',
+    'prefix' => 'admin'
+], function() {
+    Route::apiResource('/pixels', UserPixelController::class);
+});

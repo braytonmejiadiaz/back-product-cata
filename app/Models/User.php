@@ -13,7 +13,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use App\Models\Plan;
+use App\Models\UserPixel;
 use App\Models\CustomDomain;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
 
 
 
@@ -115,6 +118,11 @@ class User extends Authenticatable implements JWTSubject
 public function customDomain()
 {
     return $this->hasOne(\App\Models\CustomDomain::class);
+}
+
+public function pixels(): HasMany
+{
+    return $this->hasMany(UserPixel::class);
 }
 
 }
