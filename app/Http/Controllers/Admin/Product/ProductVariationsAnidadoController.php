@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use App\Models\Product\Attribute;
 use App\Http\Controllers\Controller;
 use App\Models\Product\ProductVariation;
+use App\Models\Product\Product;
+use Illuminate\Support\Facades\Auth;
 
 class ProductVariationsAnidadoController extends Controller
 {
@@ -14,13 +16,30 @@ class ProductVariationsAnidadoController extends Controller
      */
     public function index(Request $request)
     {
+        $user = Auth::user();
         $product_id = $request->product_id;
         $product_variation_id = $request->product_variation_id;
 
-        $variations = ProductVariation::where("product_id",$product_id)->where("product_variation_id",$product_variation_id)->orderBy("id","desc")->get();
+        // Verificar que el producto pertenezca al usuario autenticado
+        $product = Product::where('id', $product_id)
+                         ->where('user_id', $user->id)
+                         ->first();
+
+        if (!$product) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "No tienes permiso para acceder a este producto"
+            ]);
+        }
+
+        $variations = ProductVariation::with(['attribute', 'propertie'])
+            ->where("product_id", $product_id)
+            ->where("product_variation_id", $product_variation_id)
+            ->orderBy("id", "desc")
+            ->get();
 
         return response()->json([
-            "variations" =>  $variations->map(function($variation) {
+            "variations" => $variations->map(function($variation) {
                 return [
                     "id" => $variation->id,
                     "product_id" => $variation->product_id,
@@ -28,12 +47,12 @@ class ProductVariationsAnidadoController extends Controller
                     "attribute" => $variation->attribute ? [
                         "name" => $variation->attribute->name,
                         "type_attribute" => $variation->attribute->type_attribute,
-                    ] : NULL,
+                    ] : null,
                     "propertie_id" => $variation->propertie_id,
                     "propertie" => $variation->propertie ? [
                         "name" => $variation->propertie->name,
                         "code" => $variation->propertie->code,
-                    ] : NULL,
+                    ] : null,
                     "value_add" => $variation->value_add,
                     "add_price" => $variation->add_price,
                     "stock" => $variation->stock,
@@ -48,46 +67,88 @@ class ProductVariationsAnidadoController extends Controller
      */
     public function store(Request $request)
     {
+        $user = Auth::user();
         $product_variation_id = $request->product_variation_id;
-        $variations_exits = ProductVariation::where("product_id",$request->product_id)->where("product_variation_id",$product_variation_id)->count();
-        if($variations_exits > 0){
-            $variations_attributes_exits = ProductVariation::where("product_id",$request->product_id)
-                                        ->where("product_variation_id",$product_variation_id)
-                                            ->where("attribute_id",$request->attribute_id)
-                                            ->count();
-            if($variations_attributes_exits == 0){
-                return response()->json(["message" => 403,"message_text" => "NO SE PUEDE AGREGAR UN ATRIBUTO DIFERENTE DEL QUE YA HAY EN LA LISTA"]);
+
+        // Verificar que el producto pertenezca al usuario
+        $product = Product::where('id', $request->product_id)
+                         ->where('user_id', $user->id)
+                         ->first();
+
+        if (!$product) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "No tienes permiso para modificar este producto"
+            ]);
+        }
+
+        // Verificar que la variación padre pertenezca al producto del usuario
+        $parentVariation = ProductVariation::where('id', $product_variation_id)
+                                         ->where('product_id', $request->product_id)
+                                         ->first();
+
+        if (!$parentVariation) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "La variación padre no existe o no pertenece a este producto"
+            ]);
+        }
+
+        // Validaciones existentes
+        $variations_exits = ProductVariation::where("product_id", $request->product_id)
+                                          ->where("product_variation_id", $product_variation_id)
+                                          ->count();
+
+        if ($variations_exits > 0) {
+            $variations_attributes_exits = ProductVariation::where("product_id", $request->product_id)
+                                        ->where("product_variation_id", $product_variation_id)
+                                        ->where("attribute_id", $request->attribute_id)
+                                        ->count();
+
+            if ($variations_attributes_exits == 0) {
+                return response()->json([
+                    "message" => 403,
+                    "message_text" => "NO SE PUEDE AGREGAR UN ATRIBUTO DIFERENTE DEL QUE YA HAY EN LA LISTA"
+                ]);
             }
         }
+
         $is_valid_variation = null;
-        if($request->propertie_id){
-            $is_valid_variation = ProductVariation::where("product_id",$request->product_id)
-                                                    ->where("product_variation_id",$product_variation_id)
-                                                    ->where("attribute_id",$request->attribute_id)
-                                                    ->where("propertie_id",$request->propertie_id)
-                                                    ->first();
-        }else{
-            $is_valid_variation = ProductVariation::where("product_id",$request->product_id)
-                                                    ->where("product_variation_id",$product_variation_id)
-                                                        ->where("attribute_id",$request->attribute_id)
-                                                        ->where("value_add",$request->value_add)
-                                                        ->first();                                          
-        }
-        if($is_valid_variation){
-            return response()->json(["message" => 403,"message_text" => "LA VARIACION YA EXISTE, INTENTE OTRA COMBINACIÓN"]); 
+        if ($request->propertie_id) {
+            $is_valid_variation = ProductVariation::where("product_id", $request->product_id)
+                                                 ->where("product_variation_id", $product_variation_id)
+                                                 ->where("attribute_id", $request->attribute_id)
+                                                 ->where("propertie_id", $request->propertie_id)
+                                                 ->first();
+        } else {
+            $is_valid_variation = ProductVariation::where("product_id", $request->product_id)
+                                               ->where("product_variation_id", $product_variation_id)
+                                               ->where("attribute_id", $request->attribute_id)
+                                               ->where("value_add", $request->value_add)
+                                               ->first();
         }
 
-        $product_var = ProductVariation::find($product_variation_id);
-        $TOTAL_STOCK_VARIATION_CENTRAL = $product_var ? $product_var->stock : 0;
+        if ($is_valid_variation) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "LA VARIACION YA EXISTE, INTENTE OTRA COMBINACIÓN"
+            ]);
+        }
 
-        $SUM_TOTAL_STOCK_ANIDADOS = ProductVariation::where("product_id",$request->product_id)
-                                                        ->where("product_variation_id",$product_variation_id)
-                                                        ->sum("stock");
+        // Validación de stock
+        $TOTAL_STOCK_VARIATION_CENTRAL = $parentVariation->stock;
+        $SUM_TOTAL_STOCK_ANIDADOS = ProductVariation::where("product_id", $request->product_id)
+                                                   ->where("product_variation_id", $product_variation_id)
+                                                   ->sum("stock");
         $SUM_TOTAL_STOCK_ANIDADOS = $SUM_TOTAL_STOCK_ANIDADOS + $request->stock;
 
-        if($SUM_TOTAL_STOCK_ANIDADOS > $TOTAL_STOCK_VARIATION_CENTRAL){
-            return response()->json(["message" => 403,"message_text" => "NO SE PUEDE CREAR LA VARIACIÓN PORQUE EL STOCK SUPERA SU VARIACIÓN PADRE"]);
+        if ($SUM_TOTAL_STOCK_ANIDADOS > $TOTAL_STOCK_VARIATION_CENTRAL) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "NO SE PUEDE CREAR LA VARIACIÓN PORQUE EL STOCK SUPERA SU VARIACIÓN PADRE"
+            ]);
         }
+
         $product_variation = ProductVariation::create($request->all());
 
         return response()->json([
@@ -99,12 +160,12 @@ class ProductVariationsAnidadoController extends Controller
                 "attribute" => $product_variation->attribute ? [
                     "name" => $product_variation->attribute->name,
                     "type_attribute" => $product_variation->attribute->type_attribute,
-                ] : NULL,
+                ] : null,
                 "propertie_id" => $product_variation->propertie_id,
                 "propertie" => $product_variation->propertie ? [
                     "name" => $product_variation->propertie->name,
                     "code" => $product_variation->propertie->code,
-                ] : NULL,
+                ] : null,
                 "value_add" => $product_variation->value_add,
                 "add_price" => $product_variation->add_price,
                 "stock" => $product_variation->stock,
@@ -118,7 +179,10 @@ class ProductVariationsAnidadoController extends Controller
      */
     public function show(string $id)
     {
-        //
+        return response()->json([
+            "message" => 501,
+            "message_text" => "Método no implementado"
+        ]);
     }
 
     /**
@@ -126,71 +190,112 @@ class ProductVariationsAnidadoController extends Controller
      */
     public function update(Request $request, string $id)
     {
+        $user = Auth::user();
         $product_variation_id = $request->product_variation_id;
-        $variations_exits = ProductVariation::where("product_id",$request->product_id)->where("product_variation_id",$product_variation_id)->count();
-        if($variations_exits > 0){
-            $variations_attributes_exits = ProductVariation::where("product_id",$request->product_id)
-                                            ->where("product_variation_id",$product_variation_id)
-                                            ->where("attribute_id",$request->attribute_id)
-                                            ->count();
-            if($variations_attributes_exits == 0){
-                return response()->json(["message" => 403,"message_text" => "NO SE PUEDE AGREGAR UN ATRIBUTO DIFERENTE DEL QUE YA HAY EN LA LISTA"]);
+
+        // Obtener la variación anidada verificando que pertenezca a un producto del usuario
+        $variation = ProductVariation::with(['product'])
+                                   ->where('id', $id)
+                                   ->first();
+
+        if (!$variation || $variation->product->user_id != $user->id) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "No tienes permiso para modificar esta variación"
+            ]);
+        }
+
+        // Verificar que la variación padre pertenezca al producto del usuario
+        $parentVariation = ProductVariation::where('id', $product_variation_id)
+                                         ->where('product_id', $request->product_id)
+                                         ->first();
+
+        if (!$parentVariation) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "La variación padre no existe o no pertenece a este producto"
+            ]);
+        }
+
+        // Validaciones existentes
+        $variations_exits = ProductVariation::where("product_id", $request->product_id)
+                                          ->where("product_variation_id", $product_variation_id)
+                                          ->count();
+
+        if ($variations_exits > 0) {
+            $variations_attributes_exits = ProductVariation::where("product_id", $request->product_id)
+                                        ->where("product_variation_id", $product_variation_id)
+                                        ->where("attribute_id", $request->attribute_id)
+                                        ->count();
+
+            if ($variations_attributes_exits == 0) {
+                return response()->json([
+                    "message" => 403,
+                    "message_text" => "NO SE PUEDE AGREGAR UN ATRIBUTO DIFERENTE DEL QUE YA HAY EN LA LISTA"
+                ]);
             }
         }
+
         $is_valid_variation = null;
-        if($request->propertie_id){
-            $is_valid_variation = ProductVariation::where("product_id",$request->product_id)
-                                                    ->where("id","<>",$id)
-                                                    ->where("product_variation_id",$product_variation_id)
-                                                    ->where("attribute_id",$request->attribute_id)
-                                                    ->where("propertie_id",$request->propertie_id)
-                                                    ->first();
-        }else{
-            $is_valid_variation = ProductVariation::where("product_id",$request->product_id)
-                                                    ->where("id","<>",$id)
-                                                    ->where("product_variation_id",$product_variation_id)
-                                                        ->where("attribute_id",$request->attribute_id)
-                                                        ->where("value_add",$request->value_add)
-                                                        ->first();                                          
-        }
-        if($is_valid_variation){
-            return response()->json(["message" => 403,"message_text" => "LA VARIACION YA EXISTE, INTENTE OTRA COMBINACIÓN"]); 
+        if ($request->propertie_id) {
+            $is_valid_variation = ProductVariation::where("product_id", $request->product_id)
+                                               ->where("id", "<>", $id)
+                                               ->where("product_variation_id", $product_variation_id)
+                                               ->where("attribute_id", $request->attribute_id)
+                                               ->where("propertie_id", $request->propertie_id)
+                                               ->first();
+        } else {
+            $is_valid_variation = ProductVariation::where("product_id", $request->product_id)
+                                               ->where("id", "<>", $id)
+                                               ->where("product_variation_id", $product_variation_id)
+                                               ->where("attribute_id", $request->attribute_id)
+                                               ->where("value_add", $request->value_add)
+                                               ->first();
         }
 
-        $product_var = ProductVariation::find($product_variation_id);
-        $TOTAL_STOCK_VARIATION_CENTRAL = $product_var ? $product_var->stock : 0;
+        if ($is_valid_variation) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "LA VARIACION YA EXISTE, INTENTE OTRA COMBINACIÓN"
+            ]);
+        }
 
-        $SUM_TOTAL_STOCK_ANIDADOS = ProductVariation::where("product_id",$request->product_id)
-                                                        ->where("id","<>",$id)
-                                                        ->where("product_variation_id",$product_variation_id)
-                                                        ->sum("stock");
+        // Validación de stock
+        $TOTAL_STOCK_VARIATION_CENTRAL = $parentVariation->stock;
+        $SUM_TOTAL_STOCK_ANIDADOS = ProductVariation::where("product_id", $request->product_id)
+                                                  ->where("id", "<>", $id)
+                                                  ->where("product_variation_id", $product_variation_id)
+                                                  ->sum("stock");
         $SUM_TOTAL_STOCK_ANIDADOS = $SUM_TOTAL_STOCK_ANIDADOS + $request->stock;
 
-        if($SUM_TOTAL_STOCK_ANIDADOS > $TOTAL_STOCK_VARIATION_CENTRAL){
-            return response()->json(["message" => 403,"message_text" => "NO SE PUEDE CREAR LA VARIACIÓN PORQUE EL STOCK SUPERA SU VARIACIÓN PADRE"]);
+        if ($SUM_TOTAL_STOCK_ANIDADOS > $TOTAL_STOCK_VARIATION_CENTRAL) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "NO SE PUEDE CREAR LA VARIACIÓN PORQUE EL STOCK SUPERA SU VARIACIÓN PADRE"
+            ]);
         }
 
-        $product_variation = ProductVariation::findOrFail($id);
-        $product_variation->update($request->all());
+        $variation->update($request->all());
+
         return response()->json([
             "message" => 200,
             "variation" => [
-                "id" => $product_variation->id,
-                "product_id" => $product_variation->product_id,
-                "attribute_id" => $product_variation->attribute_id,
-                "attribute" => $product_variation->attribute ? [
-                    "name" => $product_variation->attribute->name,
-                    "type_attribute" => $product_variation->attribute->type_attribute,
-                ] : NULL,
-                "propertie_id" => $product_variation->propertie_id,
-                "propertie" => $product_variation->propertie ? [
-                    "name" => $product_variation->propertie->name,
-                    "code" => $product_variation->propertie->code,
-                ] : NULL,
-                "value_add" => $product_variation->value_add,
-                "add_price" => $product_variation->add_price,
-                "stock" => $product_variation->stock,
-                "product_variation_id" => $product_variation->product_variation_id,
+                "id" => $variation->id,
+                "product_id" => $variation->product_id,
+                "attribute_id" => $variation->attribute_id,
+                "attribute" => $variation->attribute ? [
+                    "name" => $variation->attribute->name,
+                    "type_attribute" => $variation->attribute->type_attribute,
+                ] : null,
+                "propertie_id" => $variation->propertie_id,
+                "propertie" => $variation->propertie ? [
+                    "name" => $variation->propertie->name,
+                    "code" => $variation->propertie->code,
+                ] : null,
+                "value_add" => $variation->value_add,
+                "add_price" => $variation->add_price,
+                "stock" => $variation->stock,
+                "product_variation_id" => $variation->product_variation_id,
             ]
         ]);
     }
@@ -200,9 +305,25 @@ class ProductVariationsAnidadoController extends Controller
      */
     public function destroy(string $id)
     {
-        $product_variation = ProductVariation::findOrFail($id);
-        $product_variation->delete();
-        // UNA VALIDACIÓN PARA QUE NO SE PUEDA ELIMINAR EN CASO EL PRODUCTO O LA VARACION ESTE EN EL CARRITO DE COMPRA O EN EL DETALLADO DE ALGUNA COMPRA
+        $user = Auth::user();
+
+        $variation = ProductVariation::with(['product'])
+                                   ->where('id', $id)
+                                   ->first();
+
+        if (!$variation || $variation->product->user_id != $user->id) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "No tienes permiso para eliminar esta variación"
+            ]);
+        }
+
+        // Aquí podrías agregar validaciones adicionales como:
+        // - Verificar si la variación está en algún carrito de compra
+        // - Verificar si tiene órdenes asociadas
+
+        $variation->delete();
+
         return response()->json([
             "message" => 200,
         ]);

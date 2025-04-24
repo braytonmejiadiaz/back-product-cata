@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin\Product;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Product\ProductSpecification;
+use App\Models\Product\Product;
+use Illuminate\Support\Facades\Auth;
 
 class ProductSpecificationsController extends Controller
 {
@@ -13,12 +15,28 @@ class ProductSpecificationsController extends Controller
      */
     public function index(Request $request)
     {
+        $user = Auth::user();
         $product_id = $request->product_id;
 
-        $specifications = ProductSpecification::where("product_id",$product_id)->orderBy("id","desc")->get();
+        // Verificar que el producto pertenezca al usuario autenticado
+        $product = Product::where('id', $product_id)
+                         ->where('user_id', $user->id)
+                         ->first();
+
+        if (!$product) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "No tienes permiso para acceder a este producto"
+            ]);
+        }
+
+        $specifications = ProductSpecification::with(['attribute', 'propertie'])
+            ->where("product_id", $product_id)
+            ->orderBy("id", "desc")
+            ->get();
 
         return response()->json([
-            "specifications" =>  $specifications->map(function($specification) {
+            "specifications" => $specifications->map(function($specification) {
                 return [
                     "id" => $specification->id,
                     "product_id" => $specification->product_id,
@@ -26,12 +44,12 @@ class ProductSpecificationsController extends Controller
                     "attribute" => $specification->attribute ? [
                         "name" => $specification->attribute->name,
                         "type_attribute" => $specification->attribute->type_attribute,
-                    ] : NULL,
+                    ] : null,
                     "propertie_id" => $specification->propertie_id,
                     "propertie" => $specification->propertie ? [
                         "name" => $specification->propertie->name,
                         "code" => $specification->propertie->code,
-                    ] : NULL,
+                    ] : null,
                     "value_add" => $specification->value_add,
                 ];
             })
@@ -43,20 +61,39 @@ class ProductSpecificationsController extends Controller
      */
     public function store(Request $request)
     {
-        $is_valid_variation = null;
-        if($request->propertie_id){
-            $is_valid_variation = ProductSpecification::where("product_id",$request->product_id)
-                                                    ->where("attribute_id",$request->attribute_id)
-                                                    ->where("propertie_id",$request->propertie_id)
-                                                    ->first();
-        }else{
-            $is_valid_variation = ProductSpecification::where("product_id",$request->product_id)
-                                                        ->where("attribute_id",$request->attribute_id)
-                                                        ->where("value_add",$request->value_add)
-                                                        ->first();                                          
+        $user = Auth::user();
+
+        // Verificar que el producto pertenezca al usuario
+        $product = Product::where('id', $request->product_id)
+                         ->where('user_id', $user->id)
+                         ->first();
+
+        if (!$product) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "No tienes permiso para modificar este producto"
+            ]);
         }
-        if($is_valid_variation){
-            return response()->json(["message" => 403,"message_text" => "LA ESPECIFICACIÓN YA EXISTE, INTENTE OTRA COMBINACIÓN"]); 
+
+        // Validar si la especificación ya existe
+        $is_valid_variation = null;
+        if ($request->propertie_id) {
+            $is_valid_variation = ProductSpecification::where("product_id", $request->product_id)
+                ->where("attribute_id", $request->attribute_id)
+                ->where("propertie_id", $request->propertie_id)
+                ->first();
+        } else {
+            $is_valid_variation = ProductSpecification::where("product_id", $request->product_id)
+                ->where("attribute_id", $request->attribute_id)
+                ->where("value_add", $request->value_add)
+                ->first();
+        }
+
+        if ($is_valid_variation) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "LA ESPECIFICACIÓN YA EXISTE, INTENTE OTRA COMBINACIÓN"
+            ]);
         }
 
         $product_specification = ProductSpecification::create($request->all());
@@ -70,12 +107,12 @@ class ProductSpecificationsController extends Controller
                 "attribute" => $product_specification->attribute ? [
                     "name" => $product_specification->attribute->name,
                     "type_attribute" => $product_specification->attribute->type_attribute,
-                ] : NULL,
+                ] : null,
                 "propertie_id" => $product_specification->propertie_id,
                 "propertie" => $product_specification->propertie ? [
                     "name" => $product_specification->propertie->name,
                     "code" => $product_specification->propertie->code,
-                ] : NULL,
+                ] : null,
                 "value_add" => $product_specification->value_add,
             ]
         ]);
@@ -86,7 +123,11 @@ class ProductSpecificationsController extends Controller
      */
     public function show(string $id)
     {
-        //
+        // Este método puede mantenerse igual o implementar la verificación de usuario
+        return response()->json([
+            "message" => 501,
+            "message_text" => "Método no implementado"
+        ]);
     }
 
     /**
@@ -94,26 +135,45 @@ class ProductSpecificationsController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $is_valid_variation = null;
-        if($request->propertie_id){
-            $is_valid_variation = ProductSpecification::where("product_id",$request->product_id)
-                                                    ->where("id","<>",$id)
-                                                    ->where("attribute_id",$request->attribute_id)
-                                                    ->where("propertie_id",$request->propertie_id)
-                                                    ->first();
-        }else{
-            $is_valid_variation = ProductSpecification::where("product_id",$request->product_id)
-                                                    ->where("id","<>",$id)
-                                                        ->where("attribute_id",$request->attribute_id)
-                                                        ->where("value_add",$request->value_add)
-                                                        ->first();                                          
-        }
-        if($is_valid_variation){
-            return response()->json(["message" => 403,"message_text" => "LA ESPECIFICACIÓN YA EXISTE, INTENTE OTRA COMBINACIÓN"]); 
+        $user = Auth::user();
+
+        // Obtener la especificación verificando que pertenezca al usuario
+        $product_specification = ProductSpecification::with(['product'])
+            ->where('id', $id)
+            ->first();
+
+        if (!$product_specification || $product_specification->product->user_id != $user->id) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "No tienes permiso para modificar esta especificación"
+            ]);
         }
 
-        $product_specification = ProductSpecification::findOrFail($id);
+        // Validar si la especificación ya existe
+        $is_valid_variation = null;
+        if ($request->propertie_id) {
+            $is_valid_variation = ProductSpecification::where("product_id", $request->product_id)
+                ->where("id", "<>", $id)
+                ->where("attribute_id", $request->attribute_id)
+                ->where("propertie_id", $request->propertie_id)
+                ->first();
+        } else {
+            $is_valid_variation = ProductSpecification::where("product_id", $request->product_id)
+                ->where("id", "<>", $id)
+                ->where("attribute_id", $request->attribute_id)
+                ->where("value_add", $request->value_add)
+                ->first();
+        }
+
+        if ($is_valid_variation) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "LA ESPECIFICACIÓN YA EXISTE, INTENTE OTRA COMBINACIÓN"
+            ]);
+        }
+
         $product_specification->update($request->all());
+
         return response()->json([
             "message" => 200,
             "specification" => [
@@ -123,12 +183,12 @@ class ProductSpecificationsController extends Controller
                 "attribute" => $product_specification->attribute ? [
                     "name" => $product_specification->attribute->name,
                     "type_attribute" => $product_specification->attribute->type_attribute,
-                ] : NULL,
+                ] : null,
                 "propertie_id" => $product_specification->propertie_id,
                 "propertie" => $product_specification->propertie ? [
                     "name" => $product_specification->propertie->name,
                     "code" => $product_specification->propertie->code,
-                ] : NULL,
+                ] : null,
                 "value_add" => $product_specification->value_add,
             ]
         ]);
@@ -139,9 +199,21 @@ class ProductSpecificationsController extends Controller
      */
     public function destroy(string $id)
     {
-        $product_variation = ProductSpecification::findOrFail($id);
-        $product_variation->delete();
-        // UNA VALIDACIÓN PARA QUE NO SE PUEDA ELIMINAR EN CASO EL PRODUCTO O LA VARACION ESTE EN EL CARRITO DE COMPRA O EN EL DETALLADO DE ALGUNA COMPRA
+        $user = Auth::user();
+
+        $product_specification = ProductSpecification::with(['product'])
+            ->where('id', $id)
+            ->first();
+
+        if (!$product_specification || $product_specification->product->user_id != $user->id) {
+            return response()->json([
+                "message" => 403,
+                "message_text" => "No tienes permiso para eliminar esta especificación"
+            ]);
+        }
+
+        $product_specification->delete();
+
         return response()->json([
             "message" => 200,
         ]);

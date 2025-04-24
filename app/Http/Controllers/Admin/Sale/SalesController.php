@@ -12,8 +12,8 @@ use App\Http\Resources\Ecommerce\Sale\SaleCollection;
 
 class SalesController extends Controller
 {
-    
-    
+
+
     public function list(Request $request) {
 
         $search = $request->search;

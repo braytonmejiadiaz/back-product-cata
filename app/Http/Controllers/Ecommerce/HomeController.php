@@ -12,10 +12,12 @@ use App\Models\Product\Product;
 use App\Models\Discount\Discount;
 use App\Models\Product\Categorie;
 use App\Models\Product\Propertie;
+use App\Models\PaymentMethod;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Ecommerce\Product\ProductEcommerceResource;
 use App\Http\Resources\Ecommerce\Product\ProductEcommerceCollection;
+use Illuminate\Support\Facades\DB;
 
 class HomeController extends Controller
 {
@@ -383,5 +385,46 @@ class HomeController extends Controller
             ],
             'is_custom_domain' => request()->is_custom_domain ?? false
         ]);
+    }
+
+    public function getUserPaymentMethods($slug)
+    {
+        try {
+            $user = User::where('slug', $slug)->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Usuario no encontrado'
+                ], 404);
+            }
+
+            // Obtener SOLO los métodos asignados al usuario
+            $userMethods = $user->paymentMethods()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['payment_methods.id', 'name', 'description']);
+
+            // Obtener el método por defecto del usuario
+            $defaultMethod = $user->paymentMethods()
+                ->wherePivot('is_default', true)
+                ->value('payment_methods.id');
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'available' => $userMethods, // Solo métodos asignados al usuario
+                    'selected' => $defaultMethod ?: ($userMethods->first() ? $userMethods->first()->id : null)
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error("Error en getUserPaymentMethods: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'Error al obtener métodos de pago',
+                'details' => env('APP_DEBUG') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 }

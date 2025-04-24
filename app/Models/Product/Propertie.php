@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\User;
 
 class Propertie extends Model
 {
@@ -36,5 +37,9 @@ class Propertie extends Model
 
     public function attribute(){
         return $this->belongsTo(Attribute::class,"attribute_id");
+    }
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 }

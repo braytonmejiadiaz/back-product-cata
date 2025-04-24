@@ -27,6 +27,8 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\AiMarketingController;
 use App\Http\Controllers\CustomDomainController;
 use App\Http\Controllers\API\UserPixelController;
+use App\Http\Controllers\API\UserPaymentMethodController;
+
 
 
 
@@ -181,6 +183,8 @@ Route::get('/user/{user_id}/products', [HomeController::class, 'getProductsByUse
 Route::get('/user/{slug}/products', [HomeController::class, 'getProductsByUserSlug']);
 Route::get('/tienda/{slug}/categories', [HomeController::class, 'getCategoriesByUserSlug']);
 Route::get('/tienda/{slug}/sliders', [HomeController::class, 'getSlidersByUserSlug']);
+Route::get('/user/{slug}/payment-methods', [HomeController::class, 'getUserPaymentMethods']);
+
 
 Route::post('/purchases', [PurchaseController::class, 'store']);
 
@@ -211,13 +215,7 @@ Route::group([
     Route::get('/history', [AiMarketingController::class, 'history']);
 });
 
-// Route::middleware(['handle.custom.domain'])->group(function() {
-//     Route::get('/tienda/{slug}', [HomeController::class, 'mostrarTiendaUsuario'])->name('tienda.show');
-//     Route::get('/tienda/{slug}/categories', [HomeController::class, 'getCategoriesByUserSlug']);
-//     Route::get('/tienda/{slug}/sliders', [HomeController::class, 'getSlidersByUserSlug']);
-//     Route::get('/productos/{slug}', [HomeController::class, 'getProductosBySlug']);
-//     Route::get('/products/{productId}', [HomeController::class, 'getProductById']);
-// });
+
 Route::group([
     'middleware' => 'auth:api',
     'prefix' => 'admin'
@@ -225,3 +223,11 @@ Route::group([
     Route::apiResource('/pixels', UserPixelController::class);
 });
 Route::get('/tiendas/{tienda}/pixel', [UserPixelController::class, 'showByTienda']);
+
+Route::group([
+    'middleware' => 'auth:api',
+    'prefix' => 'admin'
+], function($router) {
+    Route::get('/user/payment-methods', [UserPaymentMethodController::class, 'index']);
+    Route::post('/user/payment-methods/update', [UserPaymentMethodController::class, 'update']);
+});

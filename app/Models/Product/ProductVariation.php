@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\User;
 
 class ProductVariation extends Model
 {
@@ -20,7 +21,7 @@ class ProductVariation extends Model
         "stock",
         "product_variation_id"
     ];
-    
+
     public function setCreatedAtAttribute($value){
         date_default_timezone_set("America/Lima");
         $this->attributes["created_at"] = Carbon::now();
@@ -48,6 +49,10 @@ class ProductVariation extends Model
 
     public function variation_children(){
         return $this->hasMany(ProductVariation::class,"product_variation_id");
+    }
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 
 }

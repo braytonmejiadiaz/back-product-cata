@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\User;
 
 class ProductSpecification extends Model
 {
@@ -17,7 +18,7 @@ class ProductSpecification extends Model
         "propertie_id",
         "value_add",
     ];
-    
+
     public function setCreatedAtAttribute($value){
         date_default_timezone_set("America/Lima");
         $this->attributes["created_at"] = Carbon::now();
@@ -37,5 +38,9 @@ class ProductSpecification extends Model
 
     public function propertie(){
         return $this->belongsTo(Propertie::class);
+    }
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 }

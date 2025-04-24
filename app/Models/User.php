@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use App\Models\Plan;
 use App\Models\UserPixel;
+use App\Models\PaymentMethod;
 use App\Models\CustomDomain;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -124,5 +125,12 @@ public function pixels(): HasMany
 {
     return $this->hasMany(UserPixel::class);
 }
+
+public function paymentMethods()
+    {
+        return $this->belongsToMany(PaymentMethod::class, 'user_payment_methods')
+                   ->withPivot('is_default')
+                   ->withTimestamps();
+    }
 
 }
