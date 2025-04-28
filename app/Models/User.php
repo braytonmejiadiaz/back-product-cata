@@ -58,6 +58,8 @@ class User extends Authenticatable implements JWTSubject
         "vision",
         "plan_id",
         "button_radio",
+        "selected_font",
+        "bg_color",
         "mercadopago_subscription_id"
     ];
 
@@ -131,6 +133,16 @@ public function paymentMethods()
         return $this->belongsToMany(PaymentMethod::class, 'user_payment_methods')
                    ->withPivot('is_default')
                    ->withTimestamps();
+    }
+
+    protected $attributes = [
+        'selected_font' => 'Roboto'
+    ];
+
+    public function getFontFamilyAttribute()
+    {
+        return config("fonts.available.{$this->selected_font}.family")
+               ?? config("fonts.available.".config('fonts.default').".family");
     }
 
 }

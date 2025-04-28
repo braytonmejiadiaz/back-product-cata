@@ -26,6 +26,7 @@ use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AiMarketingController;
 use App\Http\Controllers\CustomDomainController;
+use App\Http\Controllers\FontController;
 use App\Http\Controllers\API\UserPixelController;
 use App\Http\Controllers\API\UserPaymentMethodController;
 
@@ -231,3 +232,20 @@ Route::group([
     Route::get('/user/payment-methods', [UserPaymentMethodController::class, 'index']);
     Route::post('/user/payment-methods/update', [UserPaymentMethodController::class, 'update']);
 });
+
+
+Route::group([
+    'middleware' => 'auth:api',
+    'prefix' => 'admin'
+], function($router) {
+    // Obtener fuentes disponibles y fuente actual del usuario
+    Route::get( '/fonts/available', [FontController::class, 'getAvailableFonts']);
+
+    // Actualizar la fuente seleccionada por el usuario
+    Route::post('/fonts/update', [FontController::class, 'updateFont']);
+
+    // Obtener la fuente actual del usuario
+    Route::get('/user/font', [FontController::class, 'getUserFont']);
+});
+
+Route::get('/public/user/{slug}/font', [FontController::class, 'getPublicUserFont']);

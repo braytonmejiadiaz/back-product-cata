@@ -368,6 +368,7 @@ private function generateUniqueSlug($storeName)
             'button_color' => $user->button_color,
             'button_radio' => $user->button_radio,
             'plan_id' => $user->plan_id,
+            'bg_color' => $user->bg_color,
         ]);
     }
 

@@ -113,6 +113,8 @@ class HomeController extends Controller
             'mision' => $user->mision,
             'vision' => $user->vision,
             'button_radio' => $user->button_radio,
+            'selected_font' => $user->selected_font,
+            'bg_color' => $user->bg_color,
             'is_custom_domain' => request()->is_custom_domain ?? false
         ]);
     }
@@ -153,6 +155,7 @@ class HomeController extends Controller
                 'mision' => $user->mision,
                 'vision' => $user->vision,
                 'slug' => $user->slug,
+                'selected_font' => $user->selected_font,
                 'is_custom_domain' => request()->is_custom_domain ?? false
             ],
             'productos' => ProductEcommerceCollection::make($productos),
