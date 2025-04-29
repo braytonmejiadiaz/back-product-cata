@@ -29,6 +29,7 @@ use App\Http\Controllers\CustomDomainController;
 use App\Http\Controllers\FontController;
 use App\Http\Controllers\API\UserPixelController;
 use App\Http\Controllers\API\UserPaymentMethodController;
+use App\Http\Controllers\AvisoController;
 
 
 
@@ -249,3 +250,12 @@ Route::group([
 });
 
 Route::get('/public/user/{slug}/font', [FontController::class, 'getPublicUserFont']);
+Route::get('avisos/public/{slug}', [AvisoController::class, 'obtenerAvisoPublico']);
+
+Route::middleware('auth:api')->group(function () {
+    // Ruta personalizada debe definirse ANTES del apiResource
+    Route::get('avisos/usuario/actual', [AvisoController::class, 'obtenerAvisoUsuario']);
+
+    // Ruta de recursos estándar
+    Route::apiResource('avisos', AvisoController::class)->except(['show']);
+});
