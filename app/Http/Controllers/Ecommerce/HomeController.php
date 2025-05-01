@@ -115,6 +115,9 @@ class HomeController extends Controller
             'button_radio' => $user->button_radio,
             'selected_font' => $user->selected_font,
             'bg_color' => $user->bg_color,
+            'currency' => $user->currency,
+            'currency_symbol' => $user->currency_symbol,
+            'country_code' => $user->country_code,
             'is_custom_domain' => request()->is_custom_domain ?? false
         ]);
     }

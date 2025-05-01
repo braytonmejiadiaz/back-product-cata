@@ -79,7 +79,10 @@ class AuthController extends Controller
                 'slug' => $this->generateUniqueSlug(request()->store_name),
                 'password' => bcrypt(request()->password),
                 'plan_id' => $plan->id,
-                'email_verified_at' => now()
+                'email_verified_at' => now(),
+                'country_code' => request()->country_code,
+                'currency' => $country['currency'],
+                'currency_symbol' => $country['currency_symbol'],
             ]);
 
                     // Enviar email de confirmación
@@ -369,6 +372,9 @@ private function generateUniqueSlug($storeName)
             'button_radio' => $user->button_radio,
             'plan_id' => $user->plan_id,
             'bg_color' => $user->bg_color,
+            'currency' => $user->currency,
+            'currency_symbol' => $user->currency_symbol,
+            'country_code' => $user->country_code,
         ]);
     }
 
@@ -484,6 +490,9 @@ public function webhook(Request $request)
                             'password' => $external['password'],
                             'plan_id' => $external['plan_id'],
                             'mercadopago_subscription_id' => $subscription->id,
+                            'country_code' => request()->country_code,
+                            'currency' => $country['currency'],
+                            'currency_symbol' => $country['currency_symbol'],
                             'email_verified_at' => now()
                         ]);
                         Log::info('✅ Usuario creado exitosamente', ['user_id' => $user->id]);
@@ -538,27 +547,27 @@ public function webhook(Request $request)
 }
 
 
-    public $countries = [
-        ['name' => 'CO', 'dial_code' => '57'],
-        ['name' => 'AR', 'dial_code' => '54'],
-        ['name' => 'BO', 'dial_code' => '591'],
-        ['name' => 'CL', 'dial_code' => '56'],
-        ['name' => 'CR', 'dial_code' => '506'],
-        ['name' => 'CU', 'dial_code' => '53'],
-        ['name' => 'EC', 'dial_code' => '593'],
-        ['name' => 'SV', 'dial_code' => '503'],
-        ['name' => 'ES', 'dial_code' => '34'],
-        ['name' => 'GT', 'dial_code' => '502'],
-        ['name' => 'HN', 'dial_code' => '504'],
-        ['name' => 'MX', 'dial_code' => '52'],
-        ['name' => 'NI', 'dial_code' => '505'],
-        ['name' => 'PA', 'dial_code' => '507'],
-        ['name' => 'PY', 'dial_code' => '595'],
-        ['name' => 'PE', 'dial_code' => '51'],
-        ['name' => 'DO', 'dial_code' => '1'],
-        ['name' => 'UY', 'dial_code' => '598'],
-        ['name' => 'VE', 'dial_code' => '58'],
-    ];
+public $countries = [
+    ['name' => 'CO', 'dial_code' => '57', 'currency' => 'COP', 'currency_symbol' => '$'],
+    ['name' => 'AR', 'dial_code' => '54', 'currency' => 'ARS', 'currency_symbol' => '$'],
+    ['name' => 'BO', 'dial_code' => '591', 'currency' => 'BOB', 'currency_symbol' => 'Bs'],
+    ['name' => 'CL', 'dial_code' => '56', 'currency' => 'CLP', 'currency_symbol' => '$'],
+    ['name' => 'CR', 'dial_code' => '506', 'currency' => 'CRC', 'currency_symbol' => '₡'],
+    ['name' => 'CU', 'dial_code' => '53', 'currency' => 'CUP', 'currency_symbol' => '$'],
+    ['name' => 'EC', 'dial_code' => '593', 'currency' => 'USD', 'currency_symbol' => '$'],
+    ['name' => 'SV', 'dial_code' => '503', 'currency' => 'USD', 'currency_symbol' => '$'],
+    ['name' => 'ES', 'dial_code' => '34', 'currency' => 'EUR', 'currency_symbol' => '€'],
+    ['name' => 'GT', 'dial_code' => '502', 'currency' => 'GTQ', 'currency_symbol' => 'Q'],
+    ['name' => 'HN', 'dial_code' => '504', 'currency' => 'HNL', 'currency_symbol' => 'L'],
+    ['name' => 'MX', 'dial_code' => '52', 'currency' => 'MXN', 'currency_symbol' => '$'],
+    ['name' => 'NI', 'dial_code' => '505', 'currency' => 'NIO', 'currency_symbol' => 'C$'],
+    ['name' => 'PA', 'dial_code' => '507', 'currency' => 'USD', 'currency_symbol' => '$'],
+    ['name' => 'PY', 'dial_code' => '595', 'currency' => 'PYG', 'currency_symbol' => '₲'],
+    ['name' => 'PE', 'dial_code' => '51', 'currency' => 'PEN', 'currency_symbol' => 'S/'],
+    ['name' => 'DO', 'dial_code' => '1', 'currency' => 'DOP', 'currency_symbol' => 'RD$'],
+    ['name' => 'UY', 'dial_code' => '598', 'currency' => 'UYU', 'currency_symbol' => '$'],
+    ['name' => 'VE', 'dial_code' => '58', 'currency' => 'USD', 'currency_symbol' => '$'],
+];
 
     public function getCountries()
     {

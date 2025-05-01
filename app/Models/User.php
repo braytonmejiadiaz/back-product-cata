@@ -60,7 +60,10 @@ class User extends Authenticatable implements JWTSubject
         "button_radio",
         "selected_font",
         "bg_color",
-        "mercadopago_subscription_id"
+        "mercadopago_subscription_id",
+        'currency',
+        'currency_symbol',
+        'country_code'
     ];
 
     /**
