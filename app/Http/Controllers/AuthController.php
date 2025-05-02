@@ -123,6 +123,9 @@ class AuthController extends Controller
                 'password' => bcrypt(request()->password),
                 'plan_id' => $plan->id,
                 'slug' => $this->generateUniqueSlug(request()->store_name),
+                'country_code' => request()->country_code,
+                'currency' => $country['currency'],
+                'currency_symbol' => $country['currency_symbol'],
                 'action' => 'register'
             ];
 
