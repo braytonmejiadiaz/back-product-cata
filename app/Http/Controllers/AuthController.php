@@ -123,6 +123,7 @@ class AuthController extends Controller
                 'password' => bcrypt(request()->password),
                 'plan_id' => $plan->id,
                 'slug' => $this->generateUniqueSlug(request()->store_name),
+                'country_code' => request()->country_code,
                 'action' => 'register'
             ];
 
@@ -443,20 +444,30 @@ public function webhook(Request $request)
     Log::info('Webhook recibido', $request->all());
 
     $type = $request->get('type');
-    if (!$type && $request->has('topic')) {
-        $type = $request->get('topic');
-    }
+    $action = $request->get('action');
 
-    if (in_array($type, ['preapproval', 'subscription_preapproval', 'payment'])) {
+    // Manejar diferentes tipos de notificaciones
+    if ($type === 'subscription_preapproval' || $action === 'payment.created') {
         MercadoPagoConfig::setAccessToken(env('MERCADO_PAGO_ACCESS_TOKEN'));
         $client = new PreApprovalClient();
 
         try {
+            // Obtener el ID de la suscripción/pago
             $preapprovalId = $request->get('data')['id'] ?? $request->get('data_id');
+
+            if (!$preapprovalId) {
+                Log::error('ID de preapproval no recibido');
+                return response()->json(['error' => 'ID de preapproval no recibido'], 400);
+            }
+
             Log::info('ID de preapproval recibido', ['preapproval_id' => $preapprovalId]);
 
+            // Obtener los datos de la suscripción
             $subscription = $client->get($preapprovalId);
-            Log::info('Datos de suscripción obtenidos desde MercadoPago', ['status' => $subscription->status]);
+            Log::info('Datos de suscripción obtenidos desde MercadoPago', [
+                'status' => $subscription->status,
+                'external_reference' => $subscription->external_reference
+            ]);
 
             // Validar external_reference
             if (empty($subscription->external_reference)) {
@@ -473,12 +484,18 @@ public function webhook(Request $request)
                 return response()->json(['error' => 'external_reference inválido'], 400);
             }
 
+            // Obtener el país del usuario
+            $country = collect($this->countries)->firstWhere('dial_code', $external['country_code'] ?? '57');
+            if (!$country) {
+                $country = $this->countries[0]; // Default a Colombia si no se encuentra
+            }
+
             // Manejar registro o actualización
             if ($subscription->status === 'authorized') {
                 if (isset($external['action']) && $external['action'] === 'register') {
                     // REGISTRO DE NUEVO USUARIO
                     if (!User::where('email', $external['email'])->exists()) {
-                        $user = User::create([
+                        $userData = [
                             'name' => $external['name'],
                             'surname' => $external['surname'],
                             'phone' => $external['phone'],
@@ -490,12 +507,15 @@ public function webhook(Request $request)
                             'password' => $external['password'],
                             'plan_id' => $external['plan_id'],
                             'mercadopago_subscription_id' => $subscription->id,
-                            'country_code' => request()->country_code,
+                            'country_code' => $external['country_code'],
                             'currency' => $country['currency'],
                             'currency_symbol' => $country['currency_symbol'],
                             'email_verified_at' => now()
-                        ]);
+                        ];
+
+                        $user = User::create($userData);
                         Log::info('✅ Usuario creado exitosamente', ['user_id' => $user->id]);
+
                         // Enviar email de confirmación
                         try {
                             Mail::to($user->email)->send(new VerifiedMail($user));
@@ -506,32 +526,17 @@ public function webhook(Request $request)
                                 'error' => $e->getMessage()
                             ]);
                         }
-                    }
-                } elseif (isset($external['action']) && $external['action'] === 'update') {
-                    // ACTUALIZACIÓN DE PLAN
-                    $user = User::find($external['user_id']);
-                    if ($user) {
-                        // Cancelar suscripción anterior si existe
-                        if ($user->mercadopago_subscription_id) {
-                            try {
-                                $client->cancel($user->mercadopago_subscription_id);
-                            } catch (\Exception $e) {
-                                Log::error('Error cancelando suscripción anterior', [
-                                    'error' => $e->getMessage()
-                                ]);
-                            }
-                        }
 
-                        $user->update([
-                            'plan_id' => $external['plan_id'],
-                            'mercadopago_subscription_id' => $subscription->id
-                        ]);
-                        Log::info('Plan actualizado exitosamente', ['user_id' => $user->id]);
+                        return response()->json(['status' => 'user_created'], 200);
+                    } else {
+                        Log::warning('Usuario ya existe', ['email' => $external['email']]);
+                        return response()->json(['status' => 'user_exists'], 200);
                     }
                 }
+            } else {
+                Log::info('Suscripción no autorizada', ['status' => $subscription->status]);
+                return response()->json(['status' => 'not_authorized'], 200);
             }
-
-            return response()->json(['status' => 'ok'], 200);
 
         } catch (\Exception $e) {
             Log::error('Error procesando webhook de MercadoPago', [
@@ -542,7 +547,7 @@ public function webhook(Request $request)
         }
     }
 
-    Log::info('Evento ignorado por tipo no manejado', ['type' => $type]);
+    Log::info('Evento ignorado por tipo no manejado', ['type' => $type, 'action' => $action]);
     return response()->json(['message' => 'Tipo de evento no manejado'], 200);
 }
 
@@ -653,6 +658,30 @@ public $countries = [
             'error' => $e->getMessage()
         ], 500);
     }
+}
+
+
+public function checkUserStatus(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'email' => 'required|email'
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json($validator->errors(), 400);
+    }
+
+    $user = User::where('email', $request->email)->first();
+
+    if ($user) {
+        return response()->json([
+            'exists' => true,
+            'active' => (bool)$user->email_verified_at,
+            'user_id' => $user->id
+        ]);
+    }
+
+    return response()->json(['exists' => false]);
 }
 
 }
