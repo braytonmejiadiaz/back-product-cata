@@ -23,7 +23,7 @@ class PurchaseController extends Controller
             'direccion' => 'required|string|max:255',
             'ciudad' => 'required|string|max:255',
             'telefono' => 'required|string|max:20',
-            'metodo_pago' => 'required|string|max:50',
+            'metodo_pago' => 'nullable',
             'comentario' => 'nullable|string',
         ]);
 

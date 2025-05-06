@@ -16,6 +16,7 @@ use App\Models\Plan;
 use App\Models\UserPixel;
 use App\Models\PaymentMethod;
 use App\Models\CustomDomain;
+use App\Models\UerShippingOption;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 
@@ -147,5 +148,10 @@ public function paymentMethods()
         return config("fonts.available.{$this->selected_font}.family")
                ?? config("fonts.available.".config('fonts.default').".family");
     }
+    // En app/Models/User.php
+public function shippingOption()
+{
+    return $this->hasOne(UserShippingOption::class);
+}
 
 }

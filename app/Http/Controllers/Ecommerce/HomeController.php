@@ -12,6 +12,7 @@ use App\Models\Product\Product;
 use App\Models\Discount\Discount;
 use App\Models\Product\Categorie;
 use App\Models\Product\Propertie;
+use App\Models\UserShippingOption;
 use App\Models\PaymentMethod;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Controller;
@@ -393,6 +394,46 @@ class HomeController extends Controller
         ]);
     }
 
+
+    public function getUserShippingOptions($slug)
+    {
+        try {
+            $user = $this->getCurrentUser($slug);
+
+            $shippingOptions = UserShippingOption::where('user_id', $user->id)->first();
+
+            // Estructura de respuesta adaptada a tu frontend
+            $responseData = [
+                'shipping_type' => 'free', // Valor por defecto
+                'flat_rate' => 0,          // Valor por defecto
+                'custom_rates' => null
+            ];
+
+            if ($shippingOptions) {
+                $responseData = [
+                    'shipping_type' => $shippingOptions->is_free ? 'free' : 'flat_rate',
+                    'flat_rate' => $shippingOptions->is_free ? 0 : $shippingOptions->shipping_rate,
+                    'custom_rates' => null // Mantener compatibilidad
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $responseData
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error("Error al obtener opciones de envío para usuario {$slug}: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'Error al obtener opciones de envío',
+                'details' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
+    }
+
+
+
     public function getUserPaymentMethods($slug)
     {
         try {
@@ -405,8 +446,8 @@ class HomeController extends Controller
                 ], 404);
             }
 
-            // Obtener SOLO los métodos asignados al usuario
-            $userMethods = $user->paymentMethods()
+            // Obtener los métodos asignados al usuario (activos)
+            $assignedMethods = $user->paymentMethods()
                 ->where('is_active', true)
                 ->orderBy('name')
                 ->get(['payment_methods.id', 'name', 'description']);
@@ -419,18 +460,20 @@ class HomeController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'available' => $userMethods, // Solo métodos asignados al usuario
-                    'selected' => $defaultMethod ?: ($userMethods->first() ? $userMethods->first()->id : null)
+                    'available' => $assignedMethods, // Solo métodos asignados al usuario
+                    'selected' => $defaultMethod,
+                    'can_delete' => $assignedMethods->count() > 1
                 ]
             ]);
 
         } catch (\Exception $e) {
-            \Log::error("Error en getUserPaymentMethods: " . $e->getMessage());
+            \Log::error("Error obteniendo métodos de pago para usuario {$slug}: " . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'error' => 'Error al obtener métodos de pago',
-                'details' => env('APP_DEBUG') ? $e->getMessage() : null
+                'details' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }
+
 }

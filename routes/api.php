@@ -30,6 +30,8 @@ use App\Http\Controllers\FontController;
 use App\Http\Controllers\API\UserPixelController;
 use App\Http\Controllers\API\UserPaymentMethodController;
 use App\Http\Controllers\AvisoController;
+use App\Http\Controllers\UserShippingOptionController;
+
 
 
 
@@ -186,6 +188,7 @@ Route::get('/user/{slug}/products', [HomeController::class, 'getProductsByUserSl
 Route::get('/tienda/{slug}/categories', [HomeController::class, 'getCategoriesByUserSlug']);
 Route::get('/tienda/{slug}/sliders', [HomeController::class, 'getSlidersByUserSlug']);
 Route::get('/user/{slug}/payment-methods', [HomeController::class, 'getUserPaymentMethods']);
+Route::get('/user/{slug}/shipping-options', [HomeController::class, 'getUserShippingOptions']);
 
 
 Route::post('/purchases', [PurchaseController::class, 'store']);
@@ -226,12 +229,15 @@ Route::group([
 });
 Route::get('/tiendas/{tienda}/pixel', [UserPixelController::class, 'showByTienda']);
 
+
 Route::group([
     'middleware' => 'auth:api',
     'prefix' => 'admin'
 ], function($router) {
     Route::get('/user/payment-methods', [UserPaymentMethodController::class, 'index']);
     Route::post('/user/payment-methods/update', [UserPaymentMethodController::class, 'update']);
+    Route::delete('/user/payment-methods/{methodId}', [UserPaymentMethodController::class, 'destroy'])
+         ->where('methodId', '[0-9]+');
 });
 
 
@@ -258,4 +264,13 @@ Route::middleware('auth:api')->group(function () {
 
     // Ruta de recursos estándar
     Route::apiResource('avisos', AvisoController::class)->except(['show']);
+});
+
+
+Route::group([
+    'middleware' => 'auth:api',
+    'prefix' => 'admin'
+], function($router) {
+    Route::get('/user/shipping', [UserShippingOptionController::class, 'show']);
+    Route::put('/user/shipping', [UserShippingOptionController::class, 'update']);
 });
